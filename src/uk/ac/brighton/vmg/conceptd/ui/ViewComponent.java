@@ -33,7 +33,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         namesComponent = new JTextArea();
         namesComponent.setTabSize(2);
         add(new JScrollPane(namesComponent), BorderLayout.CENTER);
-        log.debug("CD View Component initialized");
+        log.debug("CD View Component initialized");//
 	}
 
 	@Override
