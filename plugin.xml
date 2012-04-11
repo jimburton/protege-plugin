@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<?eclipse version="3.0"?>
+
+<plugin>
+   <extension
+         id="ConceptDiagramViewComponent"
+         point="org.protege.editor.core.application.ViewComponent">
+      <label
+            value="Concept Diagrams">
+      </label>
+      <class
+            value="uk.ac.brighton.vmg.conceptd.ui.ViewComponent">
+      </class>
+      <category
+            value="@org.protege.ontologycategory">
+      </category>
+   </extension>
+   <extension
+         id="CDWorkspaceTab"
+         point="org.protege.editor.core.application.WorkspaceTab">
+      <label
+            value="Concept Diagrams">
+      </label>
+      <class
+            value="uk.ac.brighton.vmg.conceptd.ui.WorkspaceTab">
+      </class>
+      <index
+            value="X">
+      </index>
+      <editorKitId
+            value="OWLEditorKit">
+      </editorKitId>
+      <defaultViewConfigFileName
+            value="viewconfig-CDTab.xml">
+      </defaultViewConfigFileName>
+   </extension>
+
+
+</plugin>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="src" path="src"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/JavaSE-1.6"/>
+	<classpathentry kind="lib" path="/org.protege.editor.owl/build/classes"/>
+	<classpathentry kind="lib" path="/org.protege.editor.core.application/build/classes"/>
+	<classpathentry kind="lib" path="/org.semanticweb.owl.owlapi/lib/log4j.jar"/>
+	<classpathentry kind="lib" path="/org.semanticweb.owl.owlapi/lib/owlapi-bin.jar"/>
+	<classpathentry kind="lib" path="/org.protege.editor.core.application/lib/jxp.jar"/>
+	<classpathentry kind="lib" path="/org.protege.editor.core.application/lib/mdock.jar"/>
+	<classpathentry kind="lib" path="/org.protege.editor.core.application/lib/swing-worker.jar"/>
+	<classpathentry kind="lib" path="/org.protege.editor.owl/lib/junit.jar"/>
+	<classpathentry kind="lib" path="/org.protege.editor.owl/lib/protege-owlapi-extensions.jar"/>
+	<classpathentry kind="lib" path="/org.protege.editor.owl/lib/xmlcatalog.jar"/>
+	<classpathentry kind="lib" path="lib/examplelib.jar"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>
