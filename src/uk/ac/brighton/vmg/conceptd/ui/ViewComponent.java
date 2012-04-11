@@ -1,12 +1,21 @@
 package uk.ac.brighton.vmg.conceptd.ui;
 
+import icircles.abstractDescription.AbstractDescription;
+import icircles.concreteDiagram.ConcreteDiagram;
+import icircles.concreteDiagram.DiagramCreator;
+import icircles.gui.CirclesPanel;
+import icircles.util.CannotDrawException;
+
 import java.awt.Dimension;
+import java.awt.Font;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.TreeSet;
 
 import javax.swing.Box;
 import javax.swing.BoxLayout;
+import javax.swing.JPanel;
 import javax.swing.JScrollPane;
 import javax.swing.JTextArea;
 
@@ -20,13 +29,16 @@ import uk.ac.brighton.vmg.conceptd.syntax.Zone;
 
 public class ViewComponent extends AbstractOWLClassViewComponent {
     private static final long serialVersionUID = -4515710047558710080L;
-    private JTextArea namesComponent;
+    //private JTextArea namesComponent;
+    private JPanel cdPanel;
     private JTextArea zonesComponent;
+    private TreeSet<Zone> zones; 
     // convenience class for querying the asserted subsumption hierarchy directly
     private OWLObjectHierarchyProvider<OWLClass> assertedHierarchyProvider;
     // provides string renderings of Classes/Properties/Individuals, reflecting the current output settings
     private OWLModelManagerEntityRenderer ren;
-    private TreeSet<String> labels;
+    private HashMap<String, Character> labelCharMap;
+    private char labelIndex;
     private static final Logger log = Logger.getLogger(ViewComponent.class);
 
 	@Override
@@ -38,16 +50,18 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	public void initialiseClassView() throws Exception {
 		getView().setSyncronizing(true);
 		setLayout(new BoxLayout(this, BoxLayout.Y_AXIS));
-        // in our implementation, just create a simple text area in a scrollpane
-        namesComponent = new JTextArea();
+        
+		Dimension d = new Dimension(900, 450);
+		/*namesComponent = new JTextArea();
         namesComponent.setTabSize(2);
-        Dimension d = new Dimension(900, 450);
         namesComponent.setMaximumSize(d);
         namesComponent.setMinimumSize(d);
         JScrollPane p1 = new JScrollPane(namesComponent);
         p1.setMaximumSize(d);
         p1.setMinimumSize(d);
-        add(p1);
+        add(p1);*/
+		cdPanel = new JPanel();
+		add(cdPanel);
         add(Box.createRigidArea(new Dimension(0,5)));
         zonesComponent = new JTextArea();
         zonesComponent.setMaximumSize(d);
@@ -61,20 +75,48 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 
 	@Override
 	protected OWLClass updateView(OWLClass selectedClass) {
-		namesComponent.setText("");
+		//namesComponent.setText("");
 		zonesComponent.setText("");
         if (selectedClass != null){
         	assertedHierarchyProvider = 
         			getOWLModelManager().getOWLHierarchyManager().getOWLClassHierarchyProvider();
             ren = getOWLModelManager().getOWLEntityRenderer();
-            render(selectedClass, 0);
-            writeZones(selectedClass);
+            //render(selectedClass, 0);
+            getZones(selectedClass);
+            drawCD();
         }
         return selectedClass;
 	}
 	
-	// render the class and recursively all of its subclasses
-    private void render(OWLClass selectedClass, int indent) {
+	private void drawCD() {
+		String desc = zonesToDesc();
+		zonesComponent.append(desc);
+		log.info("drawing CD? "+labelCharMap.size());
+		if(labelCharMap.size()<27) {
+			log.info("drawing CD");
+			cdPanel.removeAll();
+			cdPanel.add(getCDPanel(desc));
+		}
+	}
+	
+	private String zonesToDesc() {
+		StringBuffer sb = new StringBuffer();
+		Iterator<Zone> it = zones.iterator();
+		Zone z;
+		String[] labels;
+		while (it.hasNext()) {
+			z = it.next();
+			labels = z.getLabelsArray();
+			for(int i=0;i<labels.length;i++) {
+				sb.append(labelCharMap.get(labels[i]).charValue());
+			}
+			sb.append(" ");
+		}
+		return sb.toString();
+	}
+	
+	// write tab-indented name of class and recursively all of its subclasses
+    /*private void render(OWLClass selectedClass, int indent) {
         for (int i=0; i<indent; i++){
             namesComponent.append("\t");
         }
@@ -84,12 +126,14 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         for (OWLClass sub: assertedHierarchyProvider.getChildren(selectedClass)){
             render(sub, indent+1);
         }
-    }
+    }*/
     
-    // render the class and recursively all of its subclasses
-    private void writeZones(OWLClass selectedClass) {
-    	labels = new TreeSet<String>();
-    	TreeSet<Zone> zones = writeZonesFirstPass(selectedClass, new TreeSet<Zone>(), new Zone());
+    //  class and recursively all of its subclasses
+    private void getZones(OWLClass selectedClass) {
+    	labelCharMap = new HashMap<String, Character>();
+    	labelIndex = 'a';
+    	zones = writeZonesFirstPass(selectedClass, 
+    			new TreeSet<Zone>(), new Zone());
     	//zones = removeDisconnectedZones(zones);
     	Iterator<Zone> it = zones.iterator();
     	while(it.hasNext()) {
@@ -98,9 +142,13 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	}
     }
     
-    private TreeSet<Zone> writeZonesFirstPass(OWLClass selectedClass, TreeSet<Zone> s, Zone z) {
+    private TreeSet<Zone> writeZonesFirstPass(OWLClass selectedClass, 
+    		TreeSet<Zone> s, Zone z) {
     	String name = ren.render(selectedClass);
-    	labels.add(name);
+    	if(!labelCharMap.containsKey(name)) {
+    		labelCharMap.put(name, new Character(labelIndex));
+    		labelIndex++;
+    	}
     	Zone z2 = z.clone();
         z2.add(name);
         s.add(z2);
@@ -135,5 +183,37 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     		}
     	}
     	return result;
+    }
+    ////////////////////////////////
+    // iCircles test
+    ////////////////////////////////
+    
+    private JPanel getCDPanel(String desc) {
+    	int size = 500;
+        //String desc = "a b ab c";
+        log.info("drawing diagram " + desc);
+        Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC,  16);
+
+        ConcreteDiagram cd = null;
+        String failureMessage = null;
+        try {
+            cd = getDiagram(desc, size);
+            cd.setFont(font);
+        } catch (CannotDrawException x) {
+            failureMessage = x.message;
+        }
+
+        CirclesPanel cp = new CirclesPanel(desc, failureMessage, cd,
+                true);// do use colours
+        cp.setScaleFactor(1);
+        return cp;
+    }
+    
+    private ConcreteDiagram getDiagram(String desc,
+            int size) throws CannotDrawException {
+        AbstractDescription ad = AbstractDescription.makeForTesting(desc, false);
+        DiagramCreator dc = new DiagramCreator(ad);
+        ConcreteDiagram cd = dc.createDiagram(size);
+        return cd;
     }
 }

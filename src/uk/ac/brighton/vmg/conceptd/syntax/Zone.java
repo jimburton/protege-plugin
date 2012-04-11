@@ -76,5 +76,11 @@ public class Zone implements Comparable {
 	protected TreeSet<String> getLabels() {
 		return labels;
 	}
+	
+	public String[] getLabelsArray() {
+		String[] labelsArray = new String[labels.size()];
+		labels.toArray(labelsArray);
+		return labelsArray;
+	}
 
 }

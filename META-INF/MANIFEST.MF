@@ -7,7 +7,7 @@ Bundle-ContactAddress: vmg@brighton.ac.uk
 Bundle-DocURL: http://www.cem.brighton.ac.uk/research/vmg/
 Bundle-Description: A visualisation plugin using concept diagrams
 Bundle-Vendor: Visual Modelling Group 
-Bundle-ClassPath: .,lib/examplelib.jar
+Bundle-ClassPath: .,lib/iCircles.jar
 Import-Package: org.osgi.framework,
  org.apache.log4j,
  javax.swing,
