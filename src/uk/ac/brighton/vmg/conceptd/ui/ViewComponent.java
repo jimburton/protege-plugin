@@ -6,6 +6,7 @@ import icircles.concreteDiagram.DiagramCreator;
 import icircles.gui.CirclesPanel;
 import icircles.util.CannotDrawException;
 
+import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Font;
 import java.util.ArrayList;
@@ -39,6 +40,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private OWLModelManagerEntityRenderer ren;
     private HashMap<String, Character> labelCharMap;
     private char labelIndex;
+    private int SIZE;
     private static final Logger log = Logger.getLogger(ViewComponent.class);
 
 	@Override
@@ -61,6 +63,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         p1.setMinimumSize(d);
         add(p1);*/
 		cdPanel = new JPanel();
+		cdPanel.setBackground(Color.WHITE);
 		add(cdPanel);
         add(Box.createRigidArea(new Dimension(0,5)));
         zonesComponent = new JTextArea();
@@ -75,15 +78,22 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 
 	@Override
 	protected OWLClass updateView(OWLClass selectedClass) {
-		//namesComponent.setText("");
+		SIZE = Math.max(getHeight(), getWidth()) - 50;
 		zonesComponent.setText("");
         if (selectedClass != null){
         	assertedHierarchyProvider = 
         			getOWLModelManager().getOWLHierarchyManager().getOWLClassHierarchyProvider();
             ren = getOWLModelManager().getOWLEntityRenderer();
             //render(selectedClass, 0);
-            getZones(selectedClass);
-            drawCD();
+            StringBuffer zoneDesc = getZones(selectedClass);
+            if(labelCharMap.size()<27) {
+            	zonesComponent.setText(zoneDesc.toString());
+            	drawCD();
+            } else {
+            	cdPanel.removeAll();
+            	zonesComponent.setText("TOO MANY LABELS: [" + labelCharMap.size() + "]\n");
+            	zonesComponent.append(zoneDesc.toString());
+            }
         }
         return selectedClass;
 	}
@@ -91,12 +101,9 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	private void drawCD() {
 		String desc = zonesToDesc();
 		zonesComponent.append(desc);
-		log.info("drawing CD? "+labelCharMap.size());
-		if(labelCharMap.size()<27) {
-			log.info("drawing CD");
-			cdPanel.removeAll();
-			cdPanel.add(getCDPanel(desc));
-		}
+		log.info("drawing CD");
+		cdPanel.removeAll();
+		cdPanel.add(getCDPanel(desc));
 	}
 	
 	private String zonesToDesc() {
@@ -129,17 +136,19 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     }*/
     
     //  class and recursively all of its subclasses
-    private void getZones(OWLClass selectedClass) {
+    private StringBuffer getZones(OWLClass selectedClass) {
     	labelCharMap = new HashMap<String, Character>();
     	labelIndex = 'a';
+    	StringBuffer zoneDesc = new StringBuffer();
     	zones = writeZonesFirstPass(selectedClass, 
     			new TreeSet<Zone>(), new Zone());
     	//zones = removeDisconnectedZones(zones);
     	Iterator<Zone> it = zones.iterator();
     	while(it.hasNext()) {
-    		zonesComponent.append(it.next().toString());
-    		zonesComponent.append("\n");
+    		zoneDesc.append(it.next().toString());
+    		zoneDesc.append("\n");
     	}
+    	return zoneDesc;
     }
     
     private TreeSet<Zone> writeZonesFirstPass(OWLClass selectedClass, 
@@ -159,7 +168,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         return s;
     }
     
-    private TreeSet<Zone> removeDisconnectedZones(TreeSet<Zone> zones) {
+   /* private TreeSet<Zone> removeDisconnectedZones(TreeSet<Zone> zones) {
     	TreeSet<Zone> result = (TreeSet<Zone>)zones.clone();
     	Iterator<Zone> it = zones.iterator();
     	Zone z1,z2;
@@ -183,21 +192,19 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     		}
     	}
     	return result;
-    }
+    }*/
     ////////////////////////////////
     // iCircles test
     ////////////////////////////////
     
     private JPanel getCDPanel(String desc) {
-    	int size = 500;
-        //String desc = "a b ab c";
         log.info("drawing diagram " + desc);
         Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC,  16);
 
         ConcreteDiagram cd = null;
         String failureMessage = null;
         try {
-            cd = getDiagram(desc, size);
+            cd = getDiagram(desc, SIZE);
             cd.setFont(font);
         } catch (CannotDrawException x) {
             failureMessage = x.message;
@@ -205,7 +212,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 
         CirclesPanel cp = new CirclesPanel(desc, failureMessage, cd,
                 true);// do use colours
-        cp.setScaleFactor(1);
+        cp.setScaleFactor(.9);
         return cp;
     }
     

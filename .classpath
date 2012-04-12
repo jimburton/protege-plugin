@@ -12,6 +12,6 @@
 	<classpathentry kind="lib" path="/org.protege.editor.owl/lib/junit.jar"/>
 	<classpathentry kind="lib" path="/org.protege.editor.owl/lib/protege-owlapi-extensions.jar"/>
 	<classpathentry kind="lib" path="/org.protege.editor.owl/lib/xmlcatalog.jar"/>
-	<classpathentry kind="lib" path="lib/iCircles.jar"/>
+	<classpathentry kind="lib" path="lib/iCircles.jar" sourcepath="/iCircles/src"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>
