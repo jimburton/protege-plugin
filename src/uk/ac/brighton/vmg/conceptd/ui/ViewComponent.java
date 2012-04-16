@@ -13,9 +13,9 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 
 import javax.swing.JPanel;
 
@@ -37,8 +37,8 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private OWLObjectHierarchyProvider<OWLClass> assertedHierarchyProvider;
     // provides string renderings of Classes/Properties/Individuals, reflecting the current output settings
     private OWLModelManagerEntityRenderer ren;
-    private HashMap<String, Character> labelCharMap;
-    private char labelIndex;
+    //private HashMap<String, Character> labelCharMap;
+    //private char labelIndex;
     private int SIZE;
     private static final Logger log = Logger.getLogger(ViewComponent.class);
 
@@ -139,8 +139,8 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     
     //  class and recursively all of its subclasses
     private StringBuffer getZones(OWLClass selectedClass) {
-    	labelCharMap = new HashMap<String, Character>();
-    	labelIndex = 'a';
+    	//labelCharMap = new HashMap<String, Character>();
+    	//labelIndex = 'a';
     	StringBuffer zoneDesc = new StringBuffer();
     	zones = writeZonesFirstPass(selectedClass, 
     			new ArrayList<AbstractBasicRegion>(), new TreeSet<AbstractCurve>());
@@ -155,11 +155,12 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     
     private ArrayList<AbstractBasicRegion> writeZonesFirstPass(OWLClass selectedClass, 
     		ArrayList<AbstractBasicRegion> s, TreeSet<AbstractCurve> z) {
-    	String name = ren.render(selectedClass);
-    	if(!labelCharMap.containsKey(name)) {
+    	//strip quotes
+    	String name = ren.render(selectedClass).replaceAll("'", "");
+    	/*if(!labelCharMap.containsKey(name)) {
     		labelCharMap.put(name, new Character(labelIndex));
     		labelIndex++;
-    	}
+    	}*/
     	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
         z2.add(new AbstractCurve(CurveLabel.get(name)));
         s.add(AbstractBasicRegion.get(z2));
