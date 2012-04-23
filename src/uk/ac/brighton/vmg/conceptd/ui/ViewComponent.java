@@ -29,17 +29,15 @@ import org.semanticweb.owlapi.model.OWLClass;
 
 public class ViewComponent extends AbstractOWLClassViewComponent {
     private static final long serialVersionUID = -4515710047558710080L;
-    //private JTextArea namesComponent;
     private JPanel cdPanel;
-    //private JTextArea zonesComponent;
     private ArrayList<AbstractBasicRegion> zones; 
+    private ArrayList<String> rawZones;
     // convenience class for querying the asserted subsumption hierarchy directly
     private OWLObjectHierarchyProvider<OWLClass> assertedHierarchyProvider;
     // provides string renderings of Classes/Properties/Individuals, reflecting the current output settings
     private OWLModelManagerEntityRenderer ren;
-    //private HashMap<String, Character> labelCharMap;
-    //private char labelIndex;
-    private int SIZE;
+    private int DIAG_SIZE;
+    private final double DIAG_SCALE = 0.9;
     private static final Logger log = Logger.getLogger(ViewComponent.class);
 
 	@Override
@@ -51,78 +49,33 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	public void initialiseClassView() throws Exception {
 		getView().setSyncronizing(true);
 		setLayout(new BorderLayout(6, 6));
-		
-		//Dimension d = new Dimension(900, 450);
-		/*namesComponent = new JTextArea();
-        namesComponent.setTabSize(2);
-        namesComponent.setMaximumSize(d);
-        namesComponent.setMinimumSize(d);
-        JScrollPane p1 = new JScrollPane(namesComponent);
-        p1.setMaximumSize(d);
-        p1.setMinimumSize(d);
-        add(p1);*/
+
 		cdPanel = new JPanel();
 		cdPanel.setBackground(Color.WHITE);
 		add(cdPanel, BorderLayout.CENTER);
-        //add(Box.createRigidArea(new Dimension(0,5)));
-        //zonesComponent = new JTextArea();
-        //zonesComponent.setMaximumSize(d);
-        //zonesComponent.setMinimumSize(d);
-        //JScrollPane p2 = new JScrollPane(zonesComponent);
-        //p2.setMaximumSize(d);
-        //p2.setMinimumSize(d);
-        //add(p2);
+
         log.debug("CD View Component initialized");//
 	}
 
 	@Override
 	protected OWLClass updateView(OWLClass selectedClass) {
-		SIZE = Math.max(getHeight(), getWidth()) - 50;
-		//zonesComponent.setText("");
+		DIAG_SIZE = Math.max(getHeight(), getWidth()) - 50;
         if (selectedClass != null){
         	assertedHierarchyProvider = 
         			getOWLModelManager().getOWLHierarchyManager().getOWLClassHierarchyProvider();
             ren = getOWLModelManager().getOWLEntityRenderer();
-            //render(selectedClass, 0);
-            StringBuffer zoneDesc = getZones(selectedClass);
-            //if(labelCharMap.size()<27) {
-            	//zonesComponent.setText(zoneDesc.toString());
-            	drawCD();
-            //} else {
-            	//cdPanel.removeAll();
-            	//zonesComponent.setText("TOO MANY LABELS: [" + labelCharMap.size() + "]\n");
-            	//zonesComponent.append(zoneDesc.toString());
-            //}
+            getZones(selectedClass);
+            System.out.println(rawZones);
+            drawCD();
         }
         return selectedClass;
 	}
 	
 	private void drawCD() {
-		//String desc = zonesToDesc();
-		//zonesComponent.append(desc);
 		log.info("drawing CD");
 		cdPanel.removeAll();
-		cdPanel.add(getCDPanel(zones));
+		cdPanel.add(getCDPanel());
 	}
-	
-	/*private String zonesToDesc() {
-		StringBuffer sb = new StringBuffer();
-		Iterator<AbstractBasicRegion> it = zones.iterator();
-		AbstractBasicRegion z;
-		Iterator<AbstractCurve> contours;
-		AbstractCurve c;
-		while (it.hasNext()) {
-			z = it.next();
-			contours = z.getContourIterator();
-			while(contours.hasNext()) {
-				c = contours.next();
-				sb.append(c.getLabel().getLabel());
-				sb.append(",");
-			}
-			sb.append(" ");
-		}
-		return sb.toString();
-	}*/
 	
 	// write tab-indented name of class and recursively all of its subclasses
     /*private void render(OWLClass selectedClass, int indent) {
@@ -137,30 +90,53 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         }
     }*/
     
-    //  class and recursively all of its subclasses
-    private StringBuffer getZones(OWLClass selectedClass) {
-    	//labelCharMap = new HashMap<String, Character>();
-    	//labelIndex = 'a';
-    	StringBuffer zoneDesc = new StringBuffer();
-    	zones = writeZonesFirstPass(selectedClass, 
-    			new ArrayList<AbstractBasicRegion>(), new TreeSet<AbstractCurve>());
+    //  get zone for class and recursively all of its subclasses
+    private void getZones(OWLClass selectedClass) {
+    	zones = new ArrayList<AbstractBasicRegion>();
+    	rawZones = new ArrayList<String>();
+    	writeZonesFirstPass(selectedClass, new TreeSet<AbstractCurve>());
+    	writeRawZones(selectedClass, new StringBuffer());
     	//zones = removeDisconnectedZones(zones);
-    	Iterator<AbstractBasicRegion> it = zones.iterator();
+    	/*Iterator<AbstractBasicRegion> it = zones.iterator();
     	while(it.hasNext()) {
     		zoneDesc.append(it.next().toString());
     		zoneDesc.append("\n");
     	}
-    	return zoneDesc;
+    	return zoneDesc;*/
+    	/*rawZones = new ArrayList<String>();
+    	writeZoneString(selectedClass, new StringBuffer());*/
+    	//rawZones = new ArrayList<String>();
+    	//writeRawZones(selectedClass, new StringBuffer());
+    	//rawZonesToAbstractRegions();
     }
     
-    private ArrayList<AbstractBasicRegion> writeZonesFirstPass(OWLClass selectedClass, 
+    private void rawZonesToAbstractRegions() {
+    	
+		for(String s: rawZones) {
+			String[] zs = s.split(":");
+			TreeSet<AbstractCurve> z = new TreeSet<AbstractCurve>();
+			for(int i=0;i<zs.length;i++) {
+				if(zs[i].length()> 0)
+					z.add(new AbstractCurve(CurveLabel.get(zs[i])));
+			}
+			zones.add(AbstractBasicRegion.get(z));
+		}
+	}
+
+	private void writeRawZones(OWLClass selectedClass, StringBuffer prefix) {
+    	StringBuffer zone = new StringBuffer(prefix);
+    	zone.append(":").append(ren.render(selectedClass).replaceAll("'", ""));
+    	rawZones.add(zone.toString());
+        // the hierarchy provider gets subclasses for us
+        for (OWLClass sub: assertedHierarchyProvider.getChildren(selectedClass)){
+            writeRawZones(sub, zone);
+        }
+	}
+
+	/*private ArrayList<AbstractBasicRegion> writeZonesFirstPass(OWLClass selectedClass, 
     		ArrayList<AbstractBasicRegion> s, TreeSet<AbstractCurve> z) {
     	//strip quotes
     	String name = ren.render(selectedClass).replaceAll("'", "");
-    	/*if(!labelCharMap.containsKey(name)) {
-    		labelCharMap.put(name, new Character(labelIndex));
-    		labelIndex++;
-    	}*/
     	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
         z2.add(new AbstractCurve(CurveLabel.get(name)));
         s.add(AbstractBasicRegion.get(z2));
@@ -169,6 +145,17 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
             s.addAll(writeZonesFirstPass(sub, s, z2));
         }
         return s;
+    }*/
+    private void writeZonesFirstPass(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
+    	//strip quotes
+    	String name = ren.render(selectedClass).replaceAll("'", "");
+    	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
+        z2.add(new AbstractCurve(CurveLabel.get(name)));
+        zones.add(AbstractBasicRegion.get(z2));
+        // the hierarchy provider gets subclasses for us
+        for (OWLClass sub: assertedHierarchyProvider.getChildren(selectedClass)){
+            writeZonesFirstPass(sub, z2);
+        }
     }
     
    /* private TreeSet<Zone> removeDisconnectedZones(TreeSet<Zone> zones) {
@@ -200,32 +187,14 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     // iCircles test
     ////////////////////////////////
     
-    /*private JPanel getCDPanel(String desc) {
-        log.info("drawing diagram " + desc);
-        Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC,  16);
-
-        ConcreteDiagram cd = null;
-        String failureMessage = null;
-        try {
-            cd = getDiagram(desc, SIZE);
-            cd.setFont(font);
-        } catch (CannotDrawException x) {
-            failureMessage = x.message;
-        }
-
-        CirclesPanel cp = new CirclesPanel(desc, failureMessage, cd,
-                true);// do use colours
-        cp.setScaleFactor(.9);
-        return cp;
-    }*/
-    private JPanel getCDPanel(ArrayList<AbstractBasicRegion> zones) {
+    private JPanel getCDPanel() {
         //log.info("drawing diagram " + desc);
         Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC,  16);
 
         ConcreteDiagram cd = null;
-        String failureMessage = null;
+        String failureMessage = null; 
         try {
-            cd = getDiagram(zones, SIZE);
+            cd = getDiagram();
             cd.setFont(font);
         } catch (CannotDrawException x) {
             failureMessage = x.message;
@@ -233,22 +202,14 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 
         CirclesPanel cp = new CirclesPanel("", failureMessage, cd,
                 true);// do use colours
-        cp.setScaleFactor(.9);
+        cp.setScaleFactor(DIAG_SCALE);
         return cp;
     }
-    
-    /*private ConcreteDiagram getDiagram(String desc,
-            int size) throws CannotDrawException {
-        AbstractDescription ad = AbstractDescription.makeForTesting(desc, false);
-        DiagramCreator dc = new DiagramCreator(ad);
-        ConcreteDiagram cd = dc.createDiagram(size);
-        return cd;
-    }*/
-    private ConcreteDiagram getDiagram(ArrayList<AbstractBasicRegion> zones,
-            int size) throws CannotDrawException {
+
+    private ConcreteDiagram getDiagram() throws CannotDrawException {
         AbstractDescription ad = AbstractDescription.makeForTesting(zones);
         DiagramCreator dc = new DiagramCreator(ad);
-        ConcreteDiagram cd = dc.createDiagram(size);
+        ConcreteDiagram cd = dc.createDiagram(DIAG_SIZE);
         return cd;
     }
 }
