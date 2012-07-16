@@ -13,17 +13,20 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
 import java.util.ArrayList;
-import java.util.Iterator;
+import java.util.Set;
 import java.util.TreeSet;
-import java.util.regex.Pattern;
 
 import javax.swing.JPanel;
 
 import org.apache.log4j.Logger;
 import org.protege.editor.owl.model.hierarchy.OWLObjectHierarchyProvider;
+import org.protege.editor.owl.model.inference.OWLReasonerManager;
 import org.protege.editor.owl.ui.renderer.OWLModelManagerEntityRenderer;
 import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.OWLClass;
+import org.semanticweb.owlapi.model.OWLClassExpression;
+import org.semanticweb.owlapi.model.OWLDataFactory;
+import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
 //import uk.ac.brighton.vmg.conceptd.syntax.Zone;
 
@@ -32,12 +35,26 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private JPanel cdPanel;
     private ArrayList<AbstractBasicRegion> zones; 
     private ArrayList<String> rawZones;
+    private ArrayList<AbstractBasicRegion> shadedZones;
+    private ArrayList<String> rawClasses;
+    
     // convenience class for querying the asserted subsumption hierarchy directly
     private OWLObjectHierarchyProvider<OWLClass> assertedHierarchyProvider;
+    
+    private OWLObjectHierarchyProvider<OWLClass> inferredHierarchyProvider;
+    private OWLObjectHierarchyProvider<OWLClass> theProvider;
+    private OWLReasoner theReasoner;
+    
     // provides string renderings of Classes/Properties/Individuals, reflecting the current output settings
     private OWLModelManagerEntityRenderer ren;
     private int DIAG_SIZE;
     private final double DIAG_SCALE = 0.9;
+    private enum MODEL {
+    	INFERRED, ASSERTED
+    };
+    private MODEL theModel = MODEL.INFERRED;
+    //private MODEL theModel = MODEL.ASSERTED;
+    
     private static final Logger log = Logger.getLogger(ViewComponent.class);
 
 	@Override
@@ -63,6 +80,10 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         if (selectedClass != null){
         	assertedHierarchyProvider = 
         			getOWLModelManager().getOWLHierarchyManager().getOWLClassHierarchyProvider();
+        	inferredHierarchyProvider = 
+        			getOWLModelManager().getOWLHierarchyManager().getInferredOWLClassHierarchyProvider();
+        	theProvider = (theModel == MODEL.INFERRED ? inferredHierarchyProvider : assertedHierarchyProvider);
+        	theReasoner = getOWLModelManager().getOWLReasonerManager().getCurrentReasoner();
             ren = getOWLModelManager().getOWLEntityRenderer();
             getZones(selectedClass);
             System.out.println(rawZones);
@@ -93,9 +114,15 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     //  get zone for class and recursively all of its subclasses
     private void getZones(OWLClass selectedClass) {
     	zones = new ArrayList<AbstractBasicRegion>();
+    	shadedZones = new ArrayList<AbstractBasicRegion>();
+    	rawClasses = new ArrayList<String>();
     	rawZones = new ArrayList<String>();
     	writeZonesFirstPass(selectedClass, new TreeSet<AbstractCurve>());
     	writeRawZones(selectedClass, new StringBuffer());
+    	
+    	for(String c: rawClasses) {
+    		log.info(c);
+    	}
     	//zones = removeDisconnectedZones(zones);
     	/*Iterator<AbstractBasicRegion> it = zones.iterator();
     	while(it.hasNext()) {
@@ -128,9 +155,21 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	zone.append(":").append(ren.render(selectedClass).replaceAll("'", ""));
     	rawZones.add(zone.toString());
         // the hierarchy provider gets subclasses for us
-        for (OWLClass sub: assertedHierarchyProvider.getChildren(selectedClass)){
-            writeRawZones(sub, zone);
+        for (OWLClass sub: theProvider.getChildren(selectedClass)){
+        	writeRawZones(sub, zone);
         }
+        if(theReasoner != null) {
+	        for(Object o: getDisjoints(theReasoner, selectedClass)) {
+	        	OWLClass c = (OWLClass)o;
+	        	String name = ren.render(c).replaceAll("'", "");
+	        	if(rawClasses.contains(name)) {
+	        		log.info(selectedClass.toString() + " disjoint from " + name);
+	        	}
+	        }
+        }
+        /*for (OWLClass sub: theProvider.getEquivalents(selectedClass)){
+        	writeRawZones(sub, zone);
+        }*/
 	}
 
 	/*private ArrayList<AbstractBasicRegion> writeZonesFirstPass(OWLClass selectedClass, 
@@ -146,15 +185,55 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         }
         return s;
     }*/
+	
+	private Set getDisjoints(OWLReasoner reasoner, OWLClass cls) {
+		OWLDataFactory factory = reasoner.getRootOntology().getOWLOntologyManager().getOWLDataFactory();
+		OWLClassExpression complement = factory.getOWLObjectComplementOf(cls);
+		Set<OWLClass> equivalentToComplement = reasoner.getEquivalentClasses(complement).getEntities();
+		if(!equivalentToComplement.isEmpty()) {
+			return equivalentToComplement;
+		} else {
+			return reasoner.getSubClasses(complement, true).getFlattened();
+		}
+	}
     private void writeZonesFirstPass(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
+    	//strip quotes
+    	String name = ren.render(selectedClass).replaceAll("'", "");
+    	AbstractCurve ac = new AbstractCurve(CurveLabel.get(name));
+    	rawClasses.add(name);
+    	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
+        z2.add(ac);
+        zones.add(AbstractBasicRegion.get(z2));
+        // the hierarchy provider gets subclasses for us
+        for (OWLClass sub: theProvider.getChildren(selectedClass)){
+        	if (!(sub == null) && sub.isOWLNothing()) {
+        		shadedZones.add(AbstractBasicRegion.get(z2));
+        	} else {
+        		writeZonesFirstPass(sub, z2);
+        	}
+        }
+        /*for (OWLClass sub: theProvider.getEquivalents(selectedClass)){
+        	if (!(sub == null) && sub.isOWLNothing()) {
+        		shadedZones.add(AbstractBasicRegion.get(z2));
+        	} else {
+        		writeZonesFirstPass(sub, z2);
+        	}
+        }*/
+    }
+    
+    private void writeZonesFirstPassVenn(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
     	//strip quotes
     	String name = ren.render(selectedClass).replaceAll("'", "");
     	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
         z2.add(new AbstractCurve(CurveLabel.get(name)));
         zones.add(AbstractBasicRegion.get(z2));
         // the hierarchy provider gets subclasses for us
-        for (OWLClass sub: assertedHierarchyProvider.getChildren(selectedClass)){
-            writeZonesFirstPass(sub, z2);
+        for (OWLClass sub: theProvider.getChildren(selectedClass)){
+        	if (!(sub == null) && sub.isOWLNothing()) {
+        		shadedZones.add(AbstractBasicRegion.get(z2));
+        	} else {
+        		writeZonesFirstPassVenn(sub, z2);
+        	}
         }
     }
     
@@ -207,7 +286,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     }
 
     private ConcreteDiagram getDiagram() throws CannotDrawException {
-        AbstractDescription ad = AbstractDescription.makeForTesting(zones);
+        AbstractDescription ad = AbstractDescription.makeForTesting(zones, shadedZones);
         DiagramCreator dc = new DiagramCreator(ad);
         ConcreteDiagram cd = dc.createDiagram(DIAG_SIZE);
         return cd;
