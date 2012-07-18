@@ -1,9 +1,7 @@
 package uk.ac.brighton.vmg.conceptd.ui;
 
 import icircles.abstractDescription.AbstractBasicRegion;
-import icircles.abstractDescription.AbstractCurve;
 import icircles.abstractDescription.AbstractDescription;
-import icircles.abstractDescription.CurveLabel;
 import icircles.concreteDiagram.ConcreteDiagram;
 import icircles.concreteDiagram.DiagramCreator;
 import icircles.gui.CirclesPanel;
@@ -12,12 +10,15 @@ import icircles.util.CannotDrawException;
 import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
-import java.util.TreeSet;
 
+import javax.swing.JComboBox;
+import javax.swing.JLabel;
 import javax.swing.JPanel;
 
 import org.apache.log4j.Logger;
@@ -34,12 +35,15 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 public class ViewComponent extends AbstractOWLClassViewComponent {
     private static final long serialVersionUID = -4515710047558710080L;
     private JPanel cdPanel;
+    private JComboBox depthPicker;
+    
     private ArrayList<ArrayList<String>> rawZones;
     private ArrayList<ArrayList<String>> shadedZones;
     private ArrayList<String> rawClasses;
     private ArrayList<OWLClass> classes;
     private String outerCurve;
-    private int hierarchyDepth = 2;
+    private int hierarchyDepth = 3;
+    private final String EMPTY_LABEL = "Nothing";
     
     // convenience class for querying the asserted subsumption hierarchy directly
     private OWLObjectHierarchyProvider<OWLClass> assertedHierarchyProvider;
@@ -69,7 +73,20 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	public void initialiseClassView() throws Exception {
 		getView().setSyncronizing(true);
 		setLayout(new BorderLayout(6, 6));
-
+		
+		JPanel topPanel = new JPanel();
+		JLabel depthLabel = new JLabel("Depth:");
+		String[] depths = { "1", "2", "3", "4", "5" };
+		depthPicker = new JComboBox(depths);
+		depthPicker.setSelectedIndex(2);
+		depthPicker.addActionListener(new ActionListener() {
+	        public void actionPerformed(ActionEvent e) {
+	            hierarchyDepth = Integer.parseInt((String)depthPicker.getSelectedItem());
+	        }
+	    });
+		topPanel.add(depthLabel);
+		topPanel.add(depthPicker);
+		add(topPanel, BorderLayout.NORTH);
 		cdPanel = new JPanel();
 		cdPanel.setBackground(Color.WHITE);
 		add(cdPanel, BorderLayout.CENTER);
@@ -95,7 +112,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	}
 	
 	private void drawCD() {
-		log.info("drawing CD");
+		//log.info("drawing CD");
 		cdPanel.removeAll();
 		cdPanel.add(getCDPanel());
 	}
@@ -109,11 +126,15 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	classes = new ArrayList<OWLClass>();
     	
     	getClasses(selectedClass, hierarchyDepth);
-    	//get the Venn diagram then remove zones that don't contain the outer curve
+    	log.info(rawClasses);
+    	//get the Venn diagram 
     	ArrayList<ArrayList<String>> p0 = powerSet(rawClasses);
     	ArrayList<ArrayList<String>> p = (ArrayList<ArrayList<String>>)p0.clone();
+    	//remove zones that don't contain the outer curve
     	for(ArrayList<String> z : p0) {
-    		if(!z.contains(outerCurve)) p.remove(z);
+    		if(!(z.contains(outerCurve) || z.contains(outerCurve+"+"))) {
+    			p.remove(z);
+    		} 
     	}
     	//log.info("Venn:");
     	//log.info(p);
@@ -151,16 +172,27 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     		if(table.containsKey(realName)) {
     			for(String d: table.get(realName)) {
     				for(ArrayList<String> ls : p) {
+    					log.info("Removing: "+ls);
+    					//remove missing zones
     					if(ls.contains(rc) && ls.contains(d)) {
-    						log.info("de-Venn: removing zone with "+rc+" and "+d);
+    						//log.info("de-Venn: removing zone with "+rc+" and "+d);
     						p2.remove(ls);
-    					}
+    					} 
     				}
     				//p = (ArrayList<ArrayList<String>>)p2.clone();
     			}
     		}
     	}
-    	rawZones = p2;
+    	ArrayList<ArrayList<String>> p3 = (ArrayList<ArrayList<String>>)p2.clone();
+    	for(ArrayList<String> zone: p2) {
+    		if(zone.contains(EMPTY_LABEL)) {
+    			p3.remove(zone);
+    			ArrayList<String> sz = (ArrayList<String>)zone;
+    			sz.remove(EMPTY_LABEL);
+    			shadedZones.add(sz);
+    		}
+    	}
+    	rawZones = p3;
     }
     
     /**
@@ -288,10 +320,10 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private ConcreteDiagram getDiagram() throws CannotDrawException {
         //AbstractDescription ad = AbstractDescription.makeForTesting(zones_old, shadedZones);
     	//String s = rawZonesToString();
-    	log.info(rawZones);
-    	AbstractDescription ad = AbstractDescription.makeForTesting(rawZones, 
-    			shadedZones, false);
-        log.info(ad.debug());
+    	log.info("zones: "+rawZones);
+    	log.info("shadedZones: "+shadedZones);
+    	AbstractDescription ad = AbstractDescription.makeForTesting(rawZones, shadedZones); 
+        //log.info(ad.debug());
         DiagramCreator dc = new DiagramCreator(ad);
         ConcreteDiagram cd = dc.createDiagram(DIAG_SIZE);
         return cd;
