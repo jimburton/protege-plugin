@@ -13,19 +13,20 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Font;
 import java.util.ArrayList;
-import java.util.Set;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
 import java.util.TreeSet;
 
 import javax.swing.JPanel;
 
 import org.apache.log4j.Logger;
 import org.protege.editor.owl.model.hierarchy.OWLObjectHierarchyProvider;
-import org.protege.editor.owl.model.inference.OWLReasonerManager;
 import org.protege.editor.owl.ui.renderer.OWLModelManagerEntityRenderer;
 import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.OWLClass;
-import org.semanticweb.owlapi.model.OWLClassExpression;
-import org.semanticweb.owlapi.model.OWLDataFactory;
+import org.semanticweb.owlapi.reasoner.Node;
+import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
 //import uk.ac.brighton.vmg.conceptd.syntax.Zone;
@@ -33,10 +34,12 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 public class ViewComponent extends AbstractOWLClassViewComponent {
     private static final long serialVersionUID = -4515710047558710080L;
     private JPanel cdPanel;
-    private ArrayList<AbstractBasicRegion> zones; 
-    private ArrayList<String> rawZones;
-    private ArrayList<AbstractBasicRegion> shadedZones;
+    private ArrayList<ArrayList<String>> rawZones;
+    private ArrayList<ArrayList<String>> shadedZones;
     private ArrayList<String> rawClasses;
+    private ArrayList<OWLClass> classes;
+    private String outerCurve;
+    private int hierarchyDepth = 2;
     
     // convenience class for querying the asserted subsumption hierarchy directly
     private OWLObjectHierarchyProvider<OWLClass> assertedHierarchyProvider;
@@ -86,7 +89,6 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         	theReasoner = getOWLModelManager().getOWLReasonerManager().getCurrentReasoner();
             ren = getOWLModelManager().getOWLEntityRenderer();
             getZones(selectedClass);
-            System.out.println(rawZones);
             drawCD();
         }
         return selectedClass;
@@ -97,173 +99,171 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		cdPanel.removeAll();
 		cdPanel.add(getCDPanel());
 	}
-	
-	// write tab-indented name of class and recursively all of its subclasses
-    /*private void render(OWLClass selectedClass, int indent) {
-        for (int i=0; i<indent; i++){
-            namesComponent.append("\t");
-        }
-        namesComponent.append(ren.render(selectedClass));
-        namesComponent.append("\n");
-        // the hierarchy provider gets subclasses for us
-        for (OWLClass sub: assertedHierarchyProvider.getChildren(selectedClass)){
-            render(sub, indent+1);
-        }
-    }*/
     
     //  get zone for class and recursively all of its subclasses
     private void getZones(OWLClass selectedClass) {
-    	zones = new ArrayList<AbstractBasicRegion>();
-    	shadedZones = new ArrayList<AbstractBasicRegion>();
+    	outerCurve = ren.render(selectedClass).replaceAll("'", "");
+    	shadedZones = new ArrayList<ArrayList<String>>();
     	rawClasses = new ArrayList<String>();
-    	rawZones = new ArrayList<String>();
-    	writeZonesFirstPass(selectedClass, new TreeSet<AbstractCurve>());
-    	writeRawZones(selectedClass, new StringBuffer());
+    	rawZones = new ArrayList<ArrayList<String>>();
+    	classes = new ArrayList<OWLClass>();
     	
-    	for(String c: rawClasses) {
-    		log.info(c);
+    	getClasses(selectedClass, hierarchyDepth);
+    	//get the Venn diagram then remove zones that don't contain the outer curve
+    	ArrayList<ArrayList<String>> p0 = powerSet(rawClasses);
+    	ArrayList<ArrayList<String>> p = (ArrayList<ArrayList<String>>)p0.clone();
+    	for(ArrayList<String> z : p0) {
+    		if(!z.contains(outerCurve)) p.remove(z);
     	}
-    	//zones = removeDisconnectedZones(zones);
-    	/*Iterator<AbstractBasicRegion> it = zones.iterator();
-    	while(it.hasNext()) {
-    		zoneDesc.append(it.next().toString());
-    		zoneDesc.append("\n");
+    	//log.info("Venn:");
+    	//log.info(p);
+    	//store the disjointness info in a table: Label->ArrayList of disjoint labels
+    	HashMap<String, ArrayList<String>> table = new HashMap<String, ArrayList<String>>();
+    	ArrayList<String> v;
+    	//we only need to gather disjointness info for n-1 classes, where n is number of curves 
+    	//inside the outer curve
+    	OWLClass c;
+    	theReasoner.flush();
+    	for(int i=1;i<classes.size()-1;i++) {
+    		c = classes.get(i);
+    		NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(c);//or use TR's method
+    		v = new ArrayList<String>();
+    		Iterator<Node<OWLClass>> it = ds.iterator();
+    		OWLClass cls;
+    		String nm;
+    		while(it.hasNext()) {
+    			cls = it.next().getRepresentativeElement();
+    			nm = ren.render(cls).replaceAll("'", "");
+    			if(rawClasses.contains(nm)) {
+    				v.add(nm);
+    			} else if(rawClasses.contains(nm+"+")) {
+    				v.add(nm+"+");
+    			}
+    		}
+    		table.put(ren.render(c).replaceAll("'", ""), v);
     	}
-    	return zoneDesc;*/
-    	/*rawZones = new ArrayList<String>();
-    	writeZoneString(selectedClass, new StringBuffer());*/
-    	//rawZones = new ArrayList<String>();
-    	//writeRawZones(selectedClass, new StringBuffer());
-    	//rawZonesToAbstractRegions();
-    }
-    
-    private void rawZonesToAbstractRegions() {
     	
-		for(String s: rawZones) {
-			String[] zs = s.split(":");
-			TreeSet<AbstractCurve> z = new TreeSet<AbstractCurve>();
-			for(int i=0;i<zs.length;i++) {
-				if(zs[i].length()> 0)
-					z.add(new AbstractCurve(CurveLabel.get(zs[i])));
-			}
-			zones.add(AbstractBasicRegion.get(z));
-		}
-	}
-
-	private void writeRawZones(OWLClass selectedClass, StringBuffer prefix) {
-    	StringBuffer zone = new StringBuffer(prefix);
-    	zone.append(":").append(ren.render(selectedClass).replaceAll("'", ""));
-    	rawZones.add(zone.toString());
-        // the hierarchy provider gets subclasses for us
-        for (OWLClass sub: theProvider.getChildren(selectedClass)){
-        	writeRawZones(sub, zone);
-        }
-        if(theReasoner != null) {
-	        for(Object o: getDisjoints(theReasoner, selectedClass)) {
-	        	OWLClass c = (OWLClass)o;
-	        	String name = ren.render(c).replaceAll("'", "");
-	        	if(rawClasses.contains(name)) {
-	        		log.info(selectedClass.toString() + " disjoint from " + name);
-	        	}
-	        }
-        }
-        /*for (OWLClass sub: theProvider.getEquivalents(selectedClass)){
-        	writeRawZones(sub, zone);
-        }*/
-	}
-
-	/*private ArrayList<AbstractBasicRegion> writeZonesFirstPass(OWLClass selectedClass, 
-    		ArrayList<AbstractBasicRegion> s, TreeSet<AbstractCurve> z) {
-    	//strip quotes
-    	String name = ren.render(selectedClass).replaceAll("'", "");
-    	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
-        z2.add(new AbstractCurve(CurveLabel.get(name)));
-        s.add(AbstractBasicRegion.get(z2));
-        // the hierarchy provider gets subclasses for us
-        for (OWLClass sub: assertedHierarchyProvider.getChildren(selectedClass)){
-            s.addAll(writeZonesFirstPass(sub, s, z2));
-        }
-        return s;
-    }*/
-	
-	private Set getDisjoints(OWLReasoner reasoner, OWLClass cls) {
-		OWLDataFactory factory = reasoner.getRootOntology().getOWLOntologyManager().getOWLDataFactory();
-		OWLClassExpression complement = factory.getOWLObjectComplementOf(cls);
-		Set<OWLClass> equivalentToComplement = reasoner.getEquivalentClasses(complement).getEntities();
-		if(!equivalentToComplement.isEmpty()) {
-			return equivalentToComplement;
-		} else {
-			return reasoner.getSubClasses(complement, true).getFlattened();
-		}
-	}
-    private void writeZonesFirstPass(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
-    	//strip quotes
-    	String name = ren.render(selectedClass).replaceAll("'", "");
-    	AbstractCurve ac = new AbstractCurve(CurveLabel.get(name));
-    	rawClasses.add(name);
-    	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
-        z2.add(ac);
-        zones.add(AbstractBasicRegion.get(z2));
-        // the hierarchy provider gets subclasses for us
-        for (OWLClass sub: theProvider.getChildren(selectedClass)){
-        	if (!(sub == null) && sub.isOWLNothing()) {
-        		shadedZones.add(AbstractBasicRegion.get(z2));
-        	} else {
-        		writeZonesFirstPass(sub, z2);
-        	}
-        }
-        /*for (OWLClass sub: theProvider.getEquivalents(selectedClass)){
-        	if (!(sub == null) && sub.isOWLNothing()) {
-        		shadedZones.add(AbstractBasicRegion.get(z2));
-        	} else {
-        		writeZonesFirstPass(sub, z2);
-        	}
-        }*/
-    }
-    
-    private void writeZonesFirstPassVenn(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
-    	//strip quotes
-    	String name = ren.render(selectedClass).replaceAll("'", "");
-    	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
-        z2.add(new AbstractCurve(CurveLabel.get(name)));
-        zones.add(AbstractBasicRegion.get(z2));
-        // the hierarchy provider gets subclasses for us
-        for (OWLClass sub: theProvider.getChildren(selectedClass)){
-        	if (!(sub == null) && sub.isOWLNothing()) {
-        		shadedZones.add(AbstractBasicRegion.get(z2));
-        	} else {
-        		writeZonesFirstPassVenn(sub, z2);
-        	}
-        }
-    }
-    
-   /* private TreeSet<Zone> removeDisconnectedZones(TreeSet<Zone> zones) {
-    	TreeSet<Zone> result = (TreeSet<Zone>)zones.clone();
-    	Iterator<Zone> it = zones.iterator();
-    	Zone z1,z2;
-    	while(it.hasNext()) {
-    		z1 = it.next();
-    		Iterator<Zone> it2 = zones.iterator();
-    		while(it2.hasNext()) {
-    			z2 = it2.next();
-    			if(!z1.equals(z2)) {
-    				ArrayList<String> intersect = z1.intersect(z2);
-    				for(String s: intersect) {
-    					Zone miss = (z1.sub(s)).union(z2.sub(s));
-    					if(!zones.contains(miss)) {
-    						result.remove(z1);
-    						result.remove(z2);
-    						result.add(miss);
-    						result.add(miss.addGetZone(s));
+    	//remove missing regions from diagram
+    	ArrayList<ArrayList<String>> p2 = (ArrayList<ArrayList<String>>)p.clone();
+    	
+    	for(String rc: rawClasses) {
+    		String realName = rc.replaceFirst("\\+$", "");
+    		if(table.containsKey(realName)) {
+    			for(String d: table.get(realName)) {
+    				for(ArrayList<String> ls : p) {
+    					if(ls.contains(rc) && ls.contains(d)) {
+    						log.info("de-Venn: removing zone with "+rc+" and "+d);
+    						p2.remove(ls);
     					}
     				}
+    				//p = (ArrayList<ArrayList<String>>)p2.clone();
     			}
     		}
     	}
-    	return result;
+    	rawZones = p2;
+    }
+    
+    /**
+     * Collect the list of curve labels in the diagram
+     * @param selectedClass
+     */
+    private void getClasses(OWLClass selectedClass, int depth) {
+    	switch (depth) {
+    	  case 0:
+    		  break;
+    	  case 1:
+    		  classes.add(selectedClass);
+    		  String nm = ren.render(selectedClass).replaceAll("'", "");
+    		  if(theProvider.getChildren(selectedClass).size()>0) nm += "+";
+    	      rawClasses.add(nm);
+    	      break;
+    	  default:	
+    		classes.add(selectedClass);
+  	    	rawClasses.add(ren.render(selectedClass).replaceAll("'", ""));
+  	    	int newDepth = --depth;
+  	        for (OWLClass sub: theProvider.getChildren(selectedClass)){
+  	          getClasses(sub, newDepth);
+  	        }
+    	}
+    }
+
+    
+    /*private void rawZonesToAbstractRegions() {
+    	zones = new ArrayList<AbstractBasicRegion>();
+    	shadedZones = new ArrayList<AbstractBasicRegion>();
+    	//Collections.reverse(rawZones);//TODO remove
+    	TreeSet<AbstractCurve> z;
+    	for(ArrayList<String> zIn: rawZones) {
+			z = new TreeSet<AbstractCurve>();
+			for(String label: zIn) {
+				if(label.length()>0) {
+					z.add(new AbstractCurve(new CurveLabel(label)));
+				}
+			}
+			zones.add(new AbstractBasicRegion(z));
+		}
+	}*/
+    
+    private String rawZonesToStringOfChars() {
+    	StringBuilder s = new StringBuilder();
+    	char c = 'a';
+    	HashMap<String, String> lookup = new HashMap<String, String>(); 
+    	for(String l: rawClasses) {
+    		lookup.put(l, c+"");
+    		c++;
+    	}
+    	for(ArrayList<String> zIn: rawZones) {
+			for(String label: zIn) {
+				s.append(lookup.get(label));
+			}
+			s.append(" ");
+		}
+    	return s.toString();
+	}
+	
+    /*private void writeZonesFirstPass(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
+    	//strip quotes
+    	String name = ren.render(selectedClass).replaceAll("'", "");
+    	AbstractCurve ac = new AbstractCurve(new CurveLabel(name));
+    	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
+        z2.add(ac);
+        zones_old.add(new AbstractBasicRegion(z2));
+        // the hierarchy provider gets subclasses for us
+        for (OWLClass sub: theProvider.getChildren(selectedClass)){
+        	if (!(sub == null) && sub.isOWLNothing()) {
+        		shadedZones.add(new AbstractBasicRegion(z2));
+        	} else {
+        		writeZonesFirstPass(sub, z2);
+        	}
+        }
     }*/
+    
+    /**
+     * Take the powerset of a list
+     * @param originalSet
+     * @return
+     */
+    private <T> ArrayList<ArrayList<T>> powerSet(List<T> originalSet) {
+        ArrayList<ArrayList<T>> sets = new ArrayList<ArrayList<T>>();
+        if (originalSet.isEmpty()) {
+            sets.add(new ArrayList<T>());
+            return sets;
+        }
+        List<T> list = new ArrayList<T>(originalSet);
+        T head = list.get(0);
+        ArrayList<T> rest = new ArrayList<T>(list.subList(1, list.size())); 
+        for (ArrayList<T> set : powerSet(rest)) {
+            ArrayList<T> newSet = new ArrayList<T>();
+            newSet.add(head);
+            newSet.addAll(set);
+            sets.add(newSet);
+            sets.add(set);
+        }           
+        return sets;
+    }
+    
     ////////////////////////////////
-    // iCircles test
+    // iCircles 
     ////////////////////////////////
     
     private JPanel getCDPanel() {
@@ -286,9 +286,33 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     }
 
     private ConcreteDiagram getDiagram() throws CannotDrawException {
-        AbstractDescription ad = AbstractDescription.makeForTesting(zones, shadedZones);
+        //AbstractDescription ad = AbstractDescription.makeForTesting(zones_old, shadedZones);
+    	//String s = rawZonesToString();
+    	log.info(rawZones);
+    	AbstractDescription ad = AbstractDescription.makeForTesting(rawZones, 
+    			shadedZones, false);
+        log.info(ad.debug());
         DiagramCreator dc = new DiagramCreator(ad);
         ConcreteDiagram cd = dc.createDiagram(DIAG_SIZE);
         return cd;
     }
+    
+    private void debugZones(ArrayList<AbstractBasicRegion> zones) {
+    	log.info("############ zones ##############");
+    	for(AbstractBasicRegion abr: zones) {
+    		log.info(abr.journalString());
+    	}
+    	log.info("#################################");
+    }
+    
+//	private Set getDisjoints(OWLReasoner reasoner, OWLClass cls) {
+//	OWLDataFactory factory = reasoner.getRootOntology().getOWLOntologyManager().getOWLDataFactory();
+//	OWLClassExpression complement = factory.getOWLObjectComplementOf(cls);
+//	Set<OWLClass> equivalentToComplement = reasoner.getEquivalentClasses(complement).getEntities();
+//	if(!equivalentToComplement.isEmpty()) {
+//		return equivalentToComplement;
+//	} else {
+//		return reasoner.getSubClasses(complement, true).getFlattened();
+//	}
+//}
 }
