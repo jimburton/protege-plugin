@@ -119,7 +119,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     
     //  get zone for class and recursively all of its subclasses
     private void getZones(OWLClass selectedClass) {
-    	outerCurve = ren.render(selectedClass).replaceAll("'", "");
+    	outerCurve = render(selectedClass);
     	shadedZones = new ArrayList<ArrayList<String>>();
     	rawClasses = new ArrayList<String>();
     	rawZones = new ArrayList<ArrayList<String>>();
@@ -154,14 +154,14 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     		String nm;
     		while(it.hasNext()) {
     			cls = it.next().getRepresentativeElement();
-    			nm = ren.render(cls).replaceAll("'", "");
+    			nm = render(cls);
     			if(rawClasses.contains(nm)) {
     				v.add(nm);
     			} else if(rawClasses.contains(nm+"+")) {
     				v.add(nm+"+");
     			}
     		}
-    		table.put(ren.render(c).replaceAll("'", ""), v);
+    		table.put(render(c), v);
     	}
     	
     	//remove missing regions from diagram
@@ -169,7 +169,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	
     	for(String rc: rawClasses) {
     		String realName = rc.replaceFirst("\\+$", "");
-    		if(table.containsKey(realName)) {
+    		if(table.containsKey(render(realName))) {
     			for(String d: table.get(realName)) {
     				for(ArrayList<String> ls : p) {
     					log.info("Removing: "+ls);
@@ -183,6 +183,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     			}
     		}
     	}
+    	//create shaded zones
     	ArrayList<ArrayList<String>> p3 = (ArrayList<ArrayList<String>>)p2.clone();
     	for(ArrayList<String> zone: p2) {
     		if(zone.contains(EMPTY_LABEL)) {
@@ -200,18 +201,19 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
      * @param selectedClass
      */
     private void getClasses(OWLClass selectedClass, int depth) {
+    	//log.info("is union: "+OWLUnionClass.isInstance(selectedClass));
     	switch (depth) {
     	  case 0:
     		  break;
     	  case 1:
     		  classes.add(selectedClass);
-    		  String nm = ren.render(selectedClass).replaceAll("'", "");
+    		  String nm = render(selectedClass);
     		  if(theProvider.getChildren(selectedClass).size()>0) nm += "+";
     	      rawClasses.add(nm);
     	      break;
     	  default:	
     		classes.add(selectedClass);
-  	    	rawClasses.add(ren.render(selectedClass).replaceAll("'", ""));
+  	    	rawClasses.add(render(selectedClass));
   	    	int newDepth = --depth;
   	        for (OWLClass sub: theProvider.getChildren(selectedClass)){
   	          getClasses(sub, newDepth);
@@ -335,6 +337,14 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     		log.info(abr.journalString());
     	}
     	log.info("#################################");
+    }
+    
+    private String render(OWLClass cls) {
+    	return render(ren.render(cls));
+    }
+    
+    private String render(String clsName) {
+    	return clsName.replaceAll("'", "").replaceAll(" ", "");
     }
     
 //	private Set getDisjoints(OWLReasoner reasoner, OWLClass cls) {
