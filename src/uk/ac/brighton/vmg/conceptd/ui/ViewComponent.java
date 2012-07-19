@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Set;
 
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -25,7 +26,11 @@ import org.apache.log4j.Logger;
 import org.protege.editor.owl.model.hierarchy.OWLObjectHierarchyProvider;
 import org.protege.editor.owl.ui.renderer.OWLModelManagerEntityRenderer;
 import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
+import org.semanticweb.owlapi.model.ClassExpressionType;
 import org.semanticweb.owlapi.model.OWLClass;
+import org.semanticweb.owlapi.model.OWLClassExpression;
+import org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom;
+import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.reasoner.Node;
 import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
@@ -96,7 +101,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 
 	@Override
 	protected OWLClass updateView(OWLClass selectedClass) {
-		DIAG_SIZE = Math.max(getHeight(), getWidth()) - 50;
+		DIAG_SIZE = Math.max(getHeight(), getWidth()) - 100;
         if (selectedClass != null){
         	assertedHierarchyProvider = 
         			getOWLModelManager().getOWLHierarchyManager().getOWLClassHierarchyProvider();
@@ -104,7 +109,8 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         			getOWLModelManager().getOWLHierarchyManager().getInferredOWLClassHierarchyProvider();
         	theProvider = (theModel == MODEL.INFERRED ? inferredHierarchyProvider : assertedHierarchyProvider);
         	theReasoner = getOWLModelManager().getOWLReasonerManager().getCurrentReasoner();
-            ren = getOWLModelManager().getOWLEntityRenderer();
+        	ren = getOWLModelManager().getOWLEntityRenderer();
+        	
             getZones(selectedClass);
             drawCD();
         }
@@ -144,7 +150,8 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	//we only need to gather disjointness info for n-1 classes, where n is number of curves 
     	//inside the outer curve
     	OWLClass c;
-    	theReasoner.flush();
+    	//theReasoner.flush();
+    	OWLOntology o;
     	for(int i=1;i<classes.size()-1;i++) {
     		c = classes.get(i);
     		NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(c);//or use TR's method
@@ -172,7 +179,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     		if(table.containsKey(render(realName))) {
     			for(String d: table.get(realName)) {
     				for(ArrayList<String> ls : p) {
-    					log.info("Removing: "+ls);
+    					//log.info("Removing: "+ls);
     					//remove missing zones
     					if(ls.contains(rc) && ls.contains(d)) {
     						//log.info("de-Venn: removing zone with "+rc+" and "+d);
@@ -180,6 +187,36 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     					} 
     				}
     				//p = (ArrayList<ArrayList<String>>)p2.clone();
+    			}
+    		}
+    	}
+    	//look for union classes and equivalent classes so we can add shading later on
+    	HashMap<String, Set<OWLClass>> equivsInfo = new HashMap<String, Set<OWLClass>>();
+    	for(OWLClass cls: classes) {
+    		Node<OWLClass> equivs = theReasoner.getEquivalentClasses(cls);
+    		log.info(cls+" equivs: "+equivs);
+    		if(!equivs.isSingleton()) {
+    			log.info("has equivs with a different name");
+    			equivsInfo.put(render(cls),  equivs.getEntities());
+    		}
+    		Set<OWLEquivalentClassesAxiom> eq = 
+    				getOWLModelManager().getActiveOntology().getEquivalentClassesAxioms(cls);
+    		log.info("eq cls axioms: "+eq);
+    		if(eq.size()>0) {
+    			boolean isUnion = true;
+	    		outer:
+	    		for(OWLEquivalentClassesAxiom a: eq) {
+	    			for(OWLClassExpression e: a.getClassExpressions()) {
+	    				if (!e.getClassExpressionType().equals(ClassExpressionType.OBJECT_UNION_OF)) {
+	    					isUnion = false;
+	    					break outer;
+	    				}
+	    				//log.info("class expression:"+e);
+	    			}
+	    		}
+    			if(isUnion) {
+    				//unions.put(cls, theReasoner.getEquivalentClasses(cls));
+    				log.info("is union");
     			}
     		}
     	}
@@ -191,6 +228,19 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     			ArrayList<String> sz = (ArrayList<String>)zone;
     			sz.remove(EMPTY_LABEL);
     			shadedZones.add(sz);
+    		}
+    		outer:
+    		for(String l: zone) {
+    			String lclean = l.replaceFirst("\\+$", "");
+	    		if(equivsInfo.containsKey(lclean)) {
+	    			Set<OWLClass> equivs = equivsInfo.get(lclean);
+	    			for(OWLClass e: equivs) {
+	    				if(!zone.contains(render(e))) {
+	    					shadedZones.add(zone);
+	    					break outer;
+	    				}
+	    			}
+	    		}
     		}
     	}
     	rawZones = p3;
@@ -324,6 +374,14 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	//String s = rawZonesToString();
     	log.info("zones: "+rawZones);
     	log.info("shadedZones: "+shadedZones);
+    	/*shadedZones = new ArrayList<ArrayList<String>>();
+    	ArrayList<String> sz1 = new ArrayList<String>();
+    	sz1.add("Object");
+    	ArrayList<String> sz2 = new ArrayList<String>();
+    	sz2.add("Object");
+    	sz2.add("Agent+");
+    	shadedZones.add(sz1);
+    	shadedZones.add(sz2);*/
     	AbstractDescription ad = AbstractDescription.makeForTesting(rawZones, shadedZones); 
         //log.info(ad.debug());
         DiagramCreator dc = new DiagramCreator(ad);
