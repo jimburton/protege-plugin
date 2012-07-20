@@ -1,6 +1,5 @@
 package uk.ac.brighton.vmg.conceptd.ui;
 
-import icircles.abstractDescription.AbstractBasicRegion;
 import icircles.abstractDescription.AbstractDescription;
 import icircles.concreteDiagram.ConcreteDiagram;
 import icircles.concreteDiagram.DiagramCreator;
@@ -64,8 +63,8 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private enum MODEL {
     	INFERRED, ASSERTED
     };
-    private MODEL theModel = MODEL.INFERRED;
-    //private MODEL theModel = MODEL.ASSERTED;
+    //private MODEL theModel = MODEL.INFERRED;
+    private MODEL theModel = MODEL.ASSERTED;
     
     private static final Logger log = Logger.getLogger(ViewComponent.class);
 
@@ -96,7 +95,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		cdPanel.setBackground(Color.WHITE);
 		add(cdPanel, BorderLayout.CENTER);
 
-        log.debug("CD View Component initialized");//
+        log.debug("CD View Component initialized");
 	}
 
 	@Override
@@ -117,7 +116,8 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         	inconsistentClasses = new ArrayList<String>();
         	classMap = new HashMap<OWLClass, String>();
         	
-        	setClasses(topClass, hierarchyDepth);       	
+        	setClasses(topClass, hierarchyDepth);       
+        	log.info("classes: "+classMap.values());
             setZones();
             drawCD();
         }
@@ -149,7 +149,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	ArrayList<ArrayList<String>> p2 = (ArrayList<ArrayList<String>>)p.clone();
     	int i=0;
     	for(OWLClass c: classMap.keySet()) {
-    		if(i<=classMap.size()-1 && !c.equals(topClass)){
+    		if(i<=classMap.size()-1 && !c.equals(topClass)) {
     			String nm = classMap.get(c);
 	    		NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(c);//or use TR's method
 	    		disjoints = new ArrayList<String>();
@@ -165,10 +165,21 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	    		
 	    		for(String d: disjoints) {
     				for(ArrayList<String> ls : p) {
-    					//remove missing zones
+    					//remove missing zones but keep zones containing inconsistent classes:
+    					//these don't appear in the disjoints because the reasoner ignores them
+    					/*boolean unsat = false;
+    					for(String badLabel: inconsistentClasses) {
+    						if(ls.contains(badLabel)) {
+    							unsat = true;
+    							break;
+    						}
+    					}
+    					if(!unsat && ls.contains(nm) && ls.contains(d)) {
+    						p2.remove(ls);
+    					}*/
     					if(ls.contains(nm) && ls.contains(d)) {
     						p2.remove(ls);
-    					} 
+    					}
     				}
     			}
     		}
@@ -215,36 +226,45 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	}
     	//add shaded zones
     	ArrayList<ArrayList<String>> p3 = (ArrayList<ArrayList<String>>)p2.clone();
+    	//log.info("inconsistent classes: "+inconsistentClasses);
     	for(ArrayList<String> zone: p2) {
     		if(zone.contains(EMPTY_LABEL)) {
+    			log.info(zone+" contains empty label");
     			p3.remove(zone);
     			ArrayList<String> sz = (ArrayList<String>)zone;
     			sz.remove(EMPTY_LABEL);
     			shadedZones.add(sz);
-    		}
-    		for(String l: zone) {
-	    		if(equivsInfo.containsKey(l)) {
-	    			Set<OWLClass> equivs = equivsInfo.get(l);
-	    			for(OWLClass e: equivs) {
-	    				String eNm = classMap.get(e);
-	    				if(!zone.contains(eNm)) {
-	    					shadedZones.add(zone);
-	    					break;
-	    				}
+    		} else {
+    			
+	    		for(String l: zone) {
+	    			//log.info("consistent?: "+l);
+	    			if(inconsistentClasses.contains(l)) {
+	    				shadedZones.add(zone);
+						break;
 	    			}
+		    		if(equivsInfo.containsKey(l)) {
+		    			Set<OWLClass> equivs = equivsInfo.get(l);
+		    			for(OWLClass e: equivs) {
+		    				String eNm = classMap.get(e);
+		    				if(!zone.contains(eNm)) {
+		    					shadedZones.add(zone);
+		    					break;
+		    				}
+		    			}
+		    		}
+		    		if(unionsInfo.containsKey(l)) {
+		    			Set<OWLClass> unions = unionsInfo.get(l);
+		    			boolean shadeMe = true;
+		    			for(OWLClass u: unions) {
+		    				String uNm = classMap.get(u);
+		    				if(zone.contains(uNm)) {
+		    					shadeMe = false;
+		    					break;
+		    				}
+		    			}
+		    			if(shadeMe) shadedZones.add(zone);
+		    		}	
 	    		}
-	    		if(unionsInfo.containsKey(l)) {
-	    			Set<OWLClass> unions = unionsInfo.get(l);
-	    			boolean shadeMe = true;
-	    			for(OWLClass u: unions) {
-	    				String uNm = classMap.get(u);
-	    				if(zone.contains(uNm)) {
-	    					shadeMe = false;
-	    					break;
-	    				}
-	    			}
-	    			if(shadeMe) shadedZones.add(zone);
-	    		}	
     		}
     	}
     	zones = p3;
@@ -255,69 +275,25 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
      * @param selectedClass
      */
     private void setClasses(OWLClass cls, int depth) {
+    	log.info("adding: "+render(cls));
+    	log.info("sat: "+theReasoner.isSatisfiable(cls));
     	switch (depth) {
     	  case 0:
     		  return;
     	  case 1:
-    		  //classes.add(cls);
     		  String nm = render(cls);
     		  if(theProvider.getChildren(cls).size()>0) nm += "+";
-    	      //rawClasses.add(nm);
     		  classMap.put(cls, nm);
     	      break;
     	  default:	
-    		//classes.add(cls);
-  	    	//rawClasses.add(render(cls));
     		  classMap.put(cls, render(cls));
-  	    	int newDepth = --depth;
-  	        for (OWLClass sub: theProvider.getChildren(cls)){
-  	          setClasses(sub, newDepth);
-  	        }
+    		  int newDepth = --depth;
+  	          for (OWLClass sub: theProvider.getChildren(cls)) {
+  	        	  setClasses(sub, newDepth);
+  	          }	
     	}
     	//build the list of inconsistent classes
-    	//if(!theReasoner.isConsistent(cls)) inconsistentClasses.add(nm);
-    }
-
-    
-    /*private void writeZonesFirstPass(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
-    	//strip quotes
-    	String name = ren.render(selectedClass).replaceAll("'", "");
-    	AbstractCurve ac = new AbstractCurve(new CurveLabel(name));
-    	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
-        z2.add(ac);
-        zones_old.add(new AbstractBasicRegion(z2));
-        // the hierarchy provider gets subclasses for us
-        for (OWLClass sub: theProvider.getChildren(selectedClass)){
-        	if (!(sub == null) && sub.isOWLNothing()) {
-        		shadedZones.add(new AbstractBasicRegion(z2));
-        	} else {
-        		writeZonesFirstPass(sub, z2);
-        	}
-        }
-    }*/
-    
-    /**
-     * Take the powerset of a list
-     * @param originalSet
-     * @return
-     */
-    private <T> ArrayList<ArrayList<T>> powerSet(Collection<T> originalSet) {
-        ArrayList<ArrayList<T>> sets = new ArrayList<ArrayList<T>>();
-        if (originalSet.isEmpty()) {
-            sets.add(new ArrayList<T>());
-            return sets;
-        }
-        List<T> list = new ArrayList<T>(originalSet);
-        T head = list.get(0);
-        ArrayList<T> rest = new ArrayList<T>(list.subList(1, list.size())); 
-        for (ArrayList<T> set : powerSet(rest)) {
-            ArrayList<T> newSet = new ArrayList<T>();
-            newSet.add(head);
-            newSet.addAll(set);
-            sets.add(newSet);
-            sets.add(set);
-        }           
-        return sets;
+    	if(!theReasoner.isSatisfiable(cls)) inconsistentClasses.add(classMap.get(cls));
     }
     
     ////////////////////////////////
@@ -353,6 +329,48 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private String render(OWLClass cls) {
     	return ren.render(cls).replaceAll("'", "").replaceAll(" ", "");
     }
+    
+    /**
+     * Take the powerset of a list
+     * @param originalSet
+     * @return
+     */
+    private <T> ArrayList<ArrayList<T>> powerSet(Collection<T> originalSet) {
+        ArrayList<ArrayList<T>> sets = new ArrayList<ArrayList<T>>();
+        if (originalSet.isEmpty()) {
+            sets.add(new ArrayList<T>());
+            return sets;
+        }
+        List<T> list = new ArrayList<T>(originalSet);
+        T head = list.get(0);
+        ArrayList<T> rest = new ArrayList<T>(list.subList(1, list.size())); 
+        for (ArrayList<T> set : powerSet(rest)) {
+            ArrayList<T> newSet = new ArrayList<T>();
+            newSet.add(head);
+            newSet.addAll(set);
+            sets.add(newSet);
+            sets.add(set);
+        }           
+        return sets;
+    }
+    
+    
+    /*private void writeZonesFirstPass(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
+    	//strip quotes
+    	String name = ren.render(selectedClass).replaceAll("'", "");
+    	AbstractCurve ac = new AbstractCurve(new CurveLabel(name));
+    	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
+        z2.add(ac);
+        zones_old.add(new AbstractBasicRegion(z2));
+        // the hierarchy provider gets subclasses for us
+        for (OWLClass sub: theProvider.getChildren(selectedClass)){
+        	if (!(sub == null) && sub.isOWLNothing()) {
+        		shadedZones.add(new AbstractBasicRegion(z2));
+        	} else {
+        		writeZonesFirstPass(sub, z2);
+        	}
+        }
+    }*/
     
 //	private Set getDisjoints(OWLReasoner reasoner, OWLClass cls) {
 //	OWLDataFactory factory = reasoner.getRootOntology().getOWLOntologyManager().getOWLDataFactory();
