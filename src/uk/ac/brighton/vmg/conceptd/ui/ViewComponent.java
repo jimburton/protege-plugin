@@ -29,6 +29,7 @@ import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.ClassExpressionType;
 import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLClassExpression;
+import org.semanticweb.owlapi.model.OWLDataFactory;
 import org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.reasoner.Node;
@@ -45,12 +46,13 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private ArrayList<ArrayList<String>> rawZones;
     private ArrayList<ArrayList<String>> shadedZones;
     private ArrayList<String> rawClasses;
+    private ArrayList<String> inconsistentClasses;
     private ArrayList<OWLClass> classes;
     private String outerCurve;
     private int hierarchyDepth = 3;
     private final String EMPTY_LABEL = "Nothing";
     
-    // convenience class for querying the asserted subsumption hierarchy directly
+    private OWLClass topClass;
     private OWLObjectHierarchyProvider<OWLClass> assertedHierarchyProvider;
     
     private OWLObjectHierarchyProvider<OWLClass> inferredHierarchyProvider;
@@ -103,6 +105,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	protected OWLClass updateView(OWLClass selectedClass) {
 		DIAG_SIZE = Math.max(getHeight(), getWidth()) - 100;
         if (selectedClass != null){
+        	topClass = selectedClass;
         	assertedHierarchyProvider = 
         			getOWLModelManager().getOWLHierarchyManager().getOWLClassHierarchyProvider();
         	inferredHierarchyProvider = 
@@ -111,10 +114,21 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         	theReasoner = getOWLModelManager().getOWLReasonerManager().getCurrentReasoner();
         	ren = getOWLModelManager().getOWLEntityRenderer();
         	
-            getZones(selectedClass);
+        	setupFields();
+        	setClasses(topClass, hierarchyDepth);       	
+            setZones();
             drawCD();
         }
         return selectedClass;
+	}
+	
+	private void setupFields() {
+		classes = new ArrayList<OWLClass>();
+		outerCurve = render(topClass);
+    	shadedZones = new ArrayList<ArrayList<String>>();
+    	rawClasses = new ArrayList<String>();
+    	rawZones = new ArrayList<ArrayList<String>>();
+    	inconsistentClasses = new ArrayList<String>();
 	}
 	
 	private void drawCD() {
@@ -124,15 +138,8 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	}
     
     //  get zone for class and recursively all of its subclasses
-    private void getZones(OWLClass selectedClass) {
-    	outerCurve = render(selectedClass);
-    	shadedZones = new ArrayList<ArrayList<String>>();
-    	rawClasses = new ArrayList<String>();
-    	rawZones = new ArrayList<ArrayList<String>>();
-    	classes = new ArrayList<OWLClass>();
+    private void setZones() {
     	
-    	getClasses(selectedClass, hierarchyDepth);
-    	log.info(rawClasses);
     	//get the Venn diagram 
     	ArrayList<ArrayList<String>> p0 = powerSet(rawClasses);
     	ArrayList<ArrayList<String>> p = (ArrayList<ArrayList<String>>)p0.clone();
@@ -142,16 +149,12 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     			p.remove(z);
     		} 
     	}
-    	//log.info("Venn:");
-    	//log.info(p);
     	//store the disjointness info in a table: Label->ArrayList of disjoint labels
     	HashMap<String, ArrayList<String>> table = new HashMap<String, ArrayList<String>>();
     	ArrayList<String> v;
     	//we only need to gather disjointness info for n-1 classes, where n is number of curves 
     	//inside the outer curve
     	OWLClass c;
-    	//theReasoner.flush();
-    	OWLOntology o;
     	for(int i=1;i<classes.size()-1;i++) {
     		c = classes.get(i);
     		NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(c);//or use TR's method
@@ -179,45 +182,51 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     		if(table.containsKey(render(realName))) {
     			for(String d: table.get(realName)) {
     				for(ArrayList<String> ls : p) {
-    					//log.info("Removing: "+ls);
     					//remove missing zones
     					if(ls.contains(rc) && ls.contains(d)) {
-    						//log.info("de-Venn: removing zone with "+rc+" and "+d);
     						p2.remove(ls);
     					} 
     				}
-    				//p = (ArrayList<ArrayList<String>>)p2.clone();
     			}
     		}
     	}
     	//look for union classes and equivalent classes so we can add shading later on
     	HashMap<String, Set<OWLClass>> equivsInfo = new HashMap<String, Set<OWLClass>>();
+    	HashMap<String, Set<OWLClass>> unionsInfo = new HashMap<String, Set<OWLClass>>();
     	for(OWLClass cls: classes) {
     		Node<OWLClass> equivs = theReasoner.getEquivalentClasses(cls);
-    		log.info(cls+" equivs: "+equivs);
     		if(!equivs.isSingleton()) {
-    			log.info("has equivs with a different name");
-    			equivsInfo.put(render(cls),  equivs.getEntities());
+    			Set<OWLClass> es = equivs.getEntities();
+    			//only keep the classes in the current diagram
+    			es.retainAll(classes);
+    			equivsInfo.put(render(cls), es);
     		}
-    		Set<OWLEquivalentClassesAxiom> eq = 
-    				getOWLModelManager().getActiveOntology().getEquivalentClassesAxioms(cls);
-    		log.info("eq cls axioms: "+eq);
-    		if(eq.size()>0) {
-    			boolean isUnion = true;
-	    		outer:
-	    		for(OWLEquivalentClassesAxiom a: eq) {
-	    			for(OWLClassExpression e: a.getClassExpressions()) {
-	    				if (!e.getClassExpressionType().equals(ClassExpressionType.OBJECT_UNION_OF)) {
-	    					isUnion = false;
-	    					break outer;
-	    				}
-	    				//log.info("class expression:"+e);
-	    			}
-	    		}
-    			if(isUnion) {
-    				//unions.put(cls, theReasoner.getEquivalentClasses(cls));
-    				log.info("is union");
-    			}
+    		Set<OWLOntology> onts = getOWLModelManager().getActiveOntologies();
+    		Set<OWLEquivalentClassesAxiom> eq;
+    		for(OWLOntology ont: onts) {
+    			eq = ont.getEquivalentClassesAxioms(cls);
+    			if(eq.size()>0) {
+    	    		for(OWLEquivalentClassesAxiom a: eq) {
+    	    			boolean isUnion = true;
+    	    			ClassExpressionType t;
+    	    			for(OWLClassExpression e: a.getClassExpressions()) {
+    	    				t = e.getClassExpressionType();
+    	    				if (!(t.equals(ClassExpressionType.OWL_CLASS) 
+    	    						|| t.equals(ClassExpressionType.OBJECT_UNION_OF))) {
+    	    					isUnion = false;
+    	    					break;
+    	    				}
+    	    			}
+    	    			if(isUnion) {
+    	    				Set<OWLClass> us = a.getClassesInSignature();
+    	    				us.remove(cls);
+    	    				//only keep the classes in the current diagram
+    	    				us.retainAll(classes);
+    	    				if(us.size()>0) unionsInfo.put(render(cls), us);
+            			}
+    	    		}
+        			
+        		}
     		}
     	}
     	//create shaded zones
@@ -229,18 +238,30 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     			sz.remove(EMPTY_LABEL);
     			shadedZones.add(sz);
     		}
-    		outer:
     		for(String l: zone) {
     			String lclean = l.replaceFirst("\\+$", "");
 	    		if(equivsInfo.containsKey(lclean)) {
 	    			Set<OWLClass> equivs = equivsInfo.get(lclean);
 	    			for(OWLClass e: equivs) {
-	    				if(!zone.contains(render(e))) {
+	    				String eNm = render(e);
+	    				if(!zone.contains(eNm) && !zone.contains(eNm+"+")) {
 	    					shadedZones.add(zone);
-	    					break outer;
+	    					break;
 	    				}
 	    			}
 	    		}
+	    		if(unionsInfo.containsKey(lclean)) {
+	    			Set<OWLClass> unions = unionsInfo.get(lclean);
+	    			boolean shadeMe = true;
+	    			for(OWLClass u: unions) {
+	    				String uNm = render(u);
+	    				if(zone.contains(uNm) || zone.contains(uNm+"+")) {
+	    					shadeMe = false;
+	    					break;
+	    				}
+	    			}
+	    			if(shadeMe) shadedZones.add(zone);
+	    		}	
     		}
     	}
     	rawZones = p3;
@@ -250,25 +271,26 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
      * Collect the list of curve labels in the diagram
      * @param selectedClass
      */
-    private void getClasses(OWLClass selectedClass, int depth) {
-    	//log.info("is union: "+OWLUnionClass.isInstance(selectedClass));
+    private void setClasses(OWLClass cls, int depth) {
     	switch (depth) {
     	  case 0:
-    		  break;
+    		  return;
     	  case 1:
-    		  classes.add(selectedClass);
-    		  String nm = render(selectedClass);
-    		  if(theProvider.getChildren(selectedClass).size()>0) nm += "+";
+    		  classes.add(cls);
+    		  String nm = render(cls);
+    		  if(theProvider.getChildren(cls).size()>0) nm += "+";
     	      rawClasses.add(nm);
     	      break;
     	  default:	
-    		classes.add(selectedClass);
-  	    	rawClasses.add(render(selectedClass));
+    		classes.add(cls);
+  	    	rawClasses.add(render(cls));
   	    	int newDepth = --depth;
-  	        for (OWLClass sub: theProvider.getChildren(selectedClass)){
-  	          getClasses(sub, newDepth);
+  	        for (OWLClass sub: theProvider.getChildren(cls)){
+  	          setClasses(sub, newDepth);
   	        }
     	}
+    	//build the list of inconsistent classes
+    	//if(!theReasoner.isConsistent(cls)) inconsistentClasses.add(nm);
     }
 
     
@@ -370,21 +392,8 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     }
 
     private ConcreteDiagram getDiagram() throws CannotDrawException {
-        //AbstractDescription ad = AbstractDescription.makeForTesting(zones_old, shadedZones);
-    	//String s = rawZonesToString();
-    	log.info("zones: "+rawZones);
-    	log.info("shadedZones: "+shadedZones);
-    	/*shadedZones = new ArrayList<ArrayList<String>>();
-    	ArrayList<String> sz1 = new ArrayList<String>();
-    	sz1.add("Object");
-    	ArrayList<String> sz2 = new ArrayList<String>();
-    	sz2.add("Object");
-    	sz2.add("Agent+");
-    	shadedZones.add(sz1);
-    	shadedZones.add(sz2);*/
-    	AbstractDescription ad = AbstractDescription.makeForTesting(rawZones, shadedZones); 
-        //log.info(ad.debug());
-        DiagramCreator dc = new DiagramCreator(ad);
+      	AbstractDescription ad = AbstractDescription.makeForTesting(rawZones, shadedZones); 
+      	DiagramCreator dc = new DiagramCreator(ad);
         ConcreteDiagram cd = dc.createDiagram(DIAG_SIZE);
         return cd;
     }
