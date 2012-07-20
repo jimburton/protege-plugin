@@ -13,6 +13,7 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -29,7 +30,6 @@ import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.ClassExpressionType;
 import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLClassExpression;
-import org.semanticweb.owlapi.model.OWLDataFactory;
 import org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.reasoner.Node;
@@ -43,12 +43,10 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private JPanel cdPanel;
     private JComboBox depthPicker;
     
-    private ArrayList<ArrayList<String>> rawZones;
+    private ArrayList<ArrayList<String>> zones;
     private ArrayList<ArrayList<String>> shadedZones;
-    private ArrayList<String> rawClasses;
     private ArrayList<String> inconsistentClasses;
-    private ArrayList<OWLClass> classes;
-    private String outerCurve;
+    private HashMap<OWLClass, String> classMap;//store the display names of classes
     private int hierarchyDepth = 3;
     private final String EMPTY_LABEL = "Nothing";
     
@@ -114,21 +112,16 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         	theReasoner = getOWLModelManager().getOWLReasonerManager().getCurrentReasoner();
         	ren = getOWLModelManager().getOWLEntityRenderer();
         	
-        	setupFields();
+        	shadedZones = new ArrayList<ArrayList<String>>();
+        	zones = new ArrayList<ArrayList<String>>();
+        	inconsistentClasses = new ArrayList<String>();
+        	classMap = new HashMap<OWLClass, String>();
+        	
         	setClasses(topClass, hierarchyDepth);       	
             setZones();
             drawCD();
         }
         return selectedClass;
-	}
-	
-	private void setupFields() {
-		classes = new ArrayList<OWLClass>();
-		outerCurve = render(topClass);
-    	shadedZones = new ArrayList<ArrayList<String>>();
-    	rawClasses = new ArrayList<String>();
-    	rawZones = new ArrayList<ArrayList<String>>();
-    	inconsistentClasses = new ArrayList<String>();
 	}
 	
 	private void drawCD() {
@@ -141,64 +134,55 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private void setZones() {
     	
     	//get the Venn diagram 
-    	ArrayList<ArrayList<String>> p0 = powerSet(rawClasses);
+    	ArrayList<ArrayList<String>> p0 = powerSet(classMap.values());
     	ArrayList<ArrayList<String>> p = (ArrayList<ArrayList<String>>)p0.clone();
     	//remove zones that don't contain the outer curve
+    	String ocNm = classMap.get(topClass);
     	for(ArrayList<String> z : p0) {
-    		if(!(z.contains(outerCurve) || z.contains(outerCurve+"+"))) {
-    			p.remove(z);
-    		} 
+    		if(!z.contains(ocNm)) p.remove(z);
     	}
-    	//store the disjointness info in a table: Label->ArrayList of disjoint labels
-    	HashMap<String, ArrayList<String>> table = new HashMap<String, ArrayList<String>>();
-    	ArrayList<String> v;
+  
+    	ArrayList<String> disjoints;
     	//we only need to gather disjointness info for n-1 classes, where n is number of curves 
     	//inside the outer curve
-    	OWLClass c;
-    	for(int i=1;i<classes.size()-1;i++) {
-    		c = classes.get(i);
-    		NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(c);//or use TR's method
-    		v = new ArrayList<String>();
-    		Iterator<Node<OWLClass>> it = ds.iterator();
-    		OWLClass cls;
-    		String nm;
-    		while(it.hasNext()) {
-    			cls = it.next().getRepresentativeElement();
-    			nm = render(cls);
-    			if(rawClasses.contains(nm)) {
-    				v.add(nm);
-    			} else if(rawClasses.contains(nm+"+")) {
-    				v.add(nm+"+");
-    			}
-    		}
-    		table.put(render(c), v);
-    	}
-    	
-    	//remove missing regions from diagram
+    	//Use disjointness info to remove missing regions from diagram
     	ArrayList<ArrayList<String>> p2 = (ArrayList<ArrayList<String>>)p.clone();
-    	
-    	for(String rc: rawClasses) {
-    		String realName = rc.replaceFirst("\\+$", "");
-    		if(table.containsKey(render(realName))) {
-    			for(String d: table.get(realName)) {
+    	int i=0;
+    	for(OWLClass c: classMap.keySet()) {
+    		if(i<=classMap.size()-1 && !c.equals(topClass)){
+    			String nm = classMap.get(c);
+	    		NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(c);//or use TR's method
+	    		disjoints = new ArrayList<String>();
+	    		Iterator<Node<OWLClass>> it = ds.iterator();
+	    		OWLClass cls;
+	    		
+	    		while(it.hasNext()) {
+	    			cls = it.next().getRepresentativeElement();
+	    			if(classMap.keySet().contains(cls)) {
+	    				disjoints.add(classMap.get(cls));
+	    			}
+	    		}
+	    		
+	    		for(String d: disjoints) {
     				for(ArrayList<String> ls : p) {
     					//remove missing zones
-    					if(ls.contains(rc) && ls.contains(d)) {
+    					if(ls.contains(nm) && ls.contains(d)) {
     						p2.remove(ls);
     					} 
     				}
     			}
     		}
     	}
+    	
     	//look for union classes and equivalent classes so we can add shading later on
     	HashMap<String, Set<OWLClass>> equivsInfo = new HashMap<String, Set<OWLClass>>();
     	HashMap<String, Set<OWLClass>> unionsInfo = new HashMap<String, Set<OWLClass>>();
-    	for(OWLClass cls: classes) {
+    	for(OWLClass cls: classMap.keySet()) {
     		Node<OWLClass> equivs = theReasoner.getEquivalentClasses(cls);
     		if(!equivs.isSingleton()) {
     			Set<OWLClass> es = equivs.getEntities();
     			//only keep the classes in the current diagram
-    			es.retainAll(classes);
+    			es.retainAll(classMap.keySet());
     			equivsInfo.put(render(cls), es);
     		}
     		Set<OWLOntology> onts = getOWLModelManager().getActiveOntologies();
@@ -221,7 +205,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	    				Set<OWLClass> us = a.getClassesInSignature();
     	    				us.remove(cls);
     	    				//only keep the classes in the current diagram
-    	    				us.retainAll(classes);
+    	    				us.retainAll(classMap.keySet());
     	    				if(us.size()>0) unionsInfo.put(render(cls), us);
             			}
     	    		}
@@ -229,7 +213,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         		}
     		}
     	}
-    	//create shaded zones
+    	//add shaded zones
     	ArrayList<ArrayList<String>> p3 = (ArrayList<ArrayList<String>>)p2.clone();
     	for(ArrayList<String> zone: p2) {
     		if(zone.contains(EMPTY_LABEL)) {
@@ -239,23 +223,22 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     			shadedZones.add(sz);
     		}
     		for(String l: zone) {
-    			String lclean = l.replaceFirst("\\+$", "");
-	    		if(equivsInfo.containsKey(lclean)) {
-	    			Set<OWLClass> equivs = equivsInfo.get(lclean);
+	    		if(equivsInfo.containsKey(l)) {
+	    			Set<OWLClass> equivs = equivsInfo.get(l);
 	    			for(OWLClass e: equivs) {
-	    				String eNm = render(e);
-	    				if(!zone.contains(eNm) && !zone.contains(eNm+"+")) {
+	    				String eNm = classMap.get(e);
+	    				if(!zone.contains(eNm)) {
 	    					shadedZones.add(zone);
 	    					break;
 	    				}
 	    			}
 	    		}
-	    		if(unionsInfo.containsKey(lclean)) {
-	    			Set<OWLClass> unions = unionsInfo.get(lclean);
+	    		if(unionsInfo.containsKey(l)) {
+	    			Set<OWLClass> unions = unionsInfo.get(l);
 	    			boolean shadeMe = true;
 	    			for(OWLClass u: unions) {
-	    				String uNm = render(u);
-	    				if(zone.contains(uNm) || zone.contains(uNm+"+")) {
+	    				String uNm = classMap.get(u);
+	    				if(zone.contains(uNm)) {
 	    					shadeMe = false;
 	    					break;
 	    				}
@@ -264,7 +247,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	    		}	
     		}
     	}
-    	rawZones = p3;
+    	zones = p3;
     }
     
     /**
@@ -276,14 +259,16 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     	  case 0:
     		  return;
     	  case 1:
-    		  classes.add(cls);
+    		  //classes.add(cls);
     		  String nm = render(cls);
     		  if(theProvider.getChildren(cls).size()>0) nm += "+";
-    	      rawClasses.add(nm);
+    	      //rawClasses.add(nm);
+    		  classMap.put(cls, nm);
     	      break;
     	  default:	
-    		classes.add(cls);
-  	    	rawClasses.add(render(cls));
+    		//classes.add(cls);
+  	    	//rawClasses.add(render(cls));
+    		  classMap.put(cls, render(cls));
   	    	int newDepth = --depth;
   	        for (OWLClass sub: theProvider.getChildren(cls)){
   	          setClasses(sub, newDepth);
@@ -294,39 +279,6 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     }
 
     
-    /*private void rawZonesToAbstractRegions() {
-    	zones = new ArrayList<AbstractBasicRegion>();
-    	shadedZones = new ArrayList<AbstractBasicRegion>();
-    	//Collections.reverse(rawZones);//TODO remove
-    	TreeSet<AbstractCurve> z;
-    	for(ArrayList<String> zIn: rawZones) {
-			z = new TreeSet<AbstractCurve>();
-			for(String label: zIn) {
-				if(label.length()>0) {
-					z.add(new AbstractCurve(new CurveLabel(label)));
-				}
-			}
-			zones.add(new AbstractBasicRegion(z));
-		}
-	}*/
-    
-    private String rawZonesToStringOfChars() {
-    	StringBuilder s = new StringBuilder();
-    	char c = 'a';
-    	HashMap<String, String> lookup = new HashMap<String, String>(); 
-    	for(String l: rawClasses) {
-    		lookup.put(l, c+"");
-    		c++;
-    	}
-    	for(ArrayList<String> zIn: rawZones) {
-			for(String label: zIn) {
-				s.append(lookup.get(label));
-			}
-			s.append(" ");
-		}
-    	return s.toString();
-	}
-	
     /*private void writeZonesFirstPass(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
     	//strip quotes
     	String name = ren.render(selectedClass).replaceAll("'", "");
@@ -349,7 +301,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
      * @param originalSet
      * @return
      */
-    private <T> ArrayList<ArrayList<T>> powerSet(List<T> originalSet) {
+    private <T> ArrayList<ArrayList<T>> powerSet(Collection<T> originalSet) {
         ArrayList<ArrayList<T>> sets = new ArrayList<ArrayList<T>>();
         if (originalSet.isEmpty()) {
             sets.add(new ArrayList<T>());
@@ -392,26 +344,14 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     }
 
     private ConcreteDiagram getDiagram() throws CannotDrawException {
-      	AbstractDescription ad = AbstractDescription.makeForTesting(rawZones, shadedZones); 
+      	AbstractDescription ad = AbstractDescription.makeForTesting(zones, shadedZones); 
       	DiagramCreator dc = new DiagramCreator(ad);
         ConcreteDiagram cd = dc.createDiagram(DIAG_SIZE);
         return cd;
     }
     
-    private void debugZones(ArrayList<AbstractBasicRegion> zones) {
-    	log.info("############ zones ##############");
-    	for(AbstractBasicRegion abr: zones) {
-    		log.info(abr.journalString());
-    	}
-    	log.info("#################################");
-    }
-    
     private String render(OWLClass cls) {
-    	return render(ren.render(cls));
-    }
-    
-    private String render(String clsName) {
-    	return clsName.replaceAll("'", "").replaceAll(" ", "");
+    	return ren.render(cls).replaceAll("'", "").replaceAll(" ", "");
     }
     
 //	private Set getDisjoints(OWLReasoner reasoner, OWLClass cls) {
