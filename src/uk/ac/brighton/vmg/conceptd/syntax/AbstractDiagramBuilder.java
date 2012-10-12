@@ -26,16 +26,22 @@ public class AbstractDiagramBuilder {
     private ArrayList<ArrayList<String>> shadedZones;
     private ArrayList<String> inconsistentClasses;
     private HashMap<OWLClass, String> classMap;//store the display names of classes
+    private HashMap<String, ArrayList<String>> disjointsInfo;
+    HashMap<String, Set<OWLClass>> equivsInfo;
+	HashMap<String, Set<OWLClass>> unionsInfo;
+	HashMap<String, ArrayList<String>> supersInfo;
     private int hierarchyDepth;
     private final String EMPTY_LABEL = "Nothing";
     
     private OWLClass topClass;
+    private String topClassName;
     private OWLObjectHierarchyProvider<OWLClass> assertedHierarchyProvider;
     
     private OWLObjectHierarchyProvider<OWLClass> inferredHierarchyProvider;
     private OWLObjectHierarchyProvider<OWLClass> theProvider;
     private OWLReasoner theReasoner;
     private OWLModelManager mgr;
+    private Set<OWLOntology> activeOntologies;
     
     // provides string renderings of Classes/Properties/Individuals, reflecting the current output settings
     private OWLModelManagerEntityRenderer ren;
@@ -54,6 +60,7 @@ public class AbstractDiagramBuilder {
         	this.mgr = mgr;
         	hierarchyDepth = d;
         	topClass = selectedClass;
+        	
         	assertedHierarchyProvider = 
         			mgr.getOWLHierarchyManager().getOWLClassHierarchyProvider();
         	inferredHierarchyProvider = 
@@ -62,12 +69,17 @@ public class AbstractDiagramBuilder {
         			inferredHierarchyProvider : assertedHierarchyProvider);
         	theReasoner = mgr.getOWLReasonerManager().getCurrentReasoner();
         	ren = mgr.getOWLEntityRenderer();
+        	topClassName = render(topClass);
+        	activeOntologies = mgr.getActiveOntologies();
         	
         	shadedZones = new ArrayList<ArrayList<String>>();
         	zones = new ArrayList<ArrayList<String>>();
         	inconsistentClasses = new ArrayList<String>();
         	classMap = new HashMap<OWLClass, String>();
-
+        	disjointsInfo = new HashMap<String, ArrayList<String>>();
+        	equivsInfo = new HashMap<String, Set<OWLClass>>();
+        	unionsInfo = new HashMap<String, Set<OWLClass>>();
+        	supersInfo = new HashMap<String, ArrayList<String>>();
         }
 	}
 	
@@ -76,125 +88,51 @@ public class AbstractDiagramBuilder {
 	 */
 	public void build() {
 		if (topClass != null) {
-        	setClasses(topClass, hierarchyDepth);       
+        	setClasses(topClass, hierarchyDepth, new ArrayList<String>());       
         	log.info("classes: "+classMap.values());
             setZones();
+        	//setDisjoints();
+        	//setZones2();
         }
 	}
     
     /**
-     * Collect the list of curve labels in the diagram
+     * Collect the list of curve labels in the diagram, along with info on disjoint and union classes
      * @param selectedClass
      */
-    private void setClasses(OWLClass cls, int depth) {
-    	//log.info("adding: "+render(cls));
-    	//log.info("sat: "+theReasoner.isSatisfiable(cls));
-    	switch (depth) {
-    	  case 0:
-    		  return;
-    	  case 1:
-    		  String nm = render(cls);
-    		  if(theProvider.getChildren(cls).size()>0) nm += "+";
-    		  classMap.put(cls, nm);
-    	      break;
-    	  default:	
-    		  classMap.put(cls, render(cls));
-    		  int newDepth = --depth;
-  	          for (OWLClass sub: theProvider.getChildren(cls)) {
-  	        	  setClasses(sub, newDepth);
-  	          }	
-    	}
-    	//build the list of inconsistent classes
-    	if(!theReasoner.isSatisfiable(cls)) inconsistentClasses.add(classMap.get(cls));
-    }
-    
-    //  get zone for class and recursively all of its subclasses
-    private void setZones() {
-    	
-    	//get the Venn diagram 
-    	ArrayList<ArrayList<String>> p = powerSet(classMap.values());
-    	ArrayList<ArrayList<String>> pTemp = (ArrayList<ArrayList<String>>)p.clone();
-    	//remove zones that don't contain the outer curve
-    	String ocNm = classMap.get(topClass);
-    	for(ArrayList<String> z : pTemp) {
-    		if(!z.contains(ocNm)) p.remove(z);
-    	}
-    	//remove some more zones to get subclass relationships right
-    	pTemp = (ArrayList<ArrayList<String>>)p.clone();
-    	for(OWLClass c: classMap.keySet()) {
-    		if(!c.equals(topClass)) {
-    			Set<OWLClass> children = theProvider.getChildren(c);
-    			for(ArrayList<String> z : pTemp) {
-    				if(!z.contains(classMap.get(c))) {
-    					boolean keeper = true;
-    					for(OWLClass c2: children) {
-    						if(z.contains(classMap.get(c2))) {
-    							keeper = false;
-    							break;
-    						}
-    					}
-    					if(!keeper) p.remove(z);
-    				}
-    	    	}
+    private void setClasses(OWLClass cls, int depth, ArrayList<String> supers) {
+
+    	if(depth>0) {
+    		String nm = render(cls);
+    		supersInfo.put(nm, supers);
+    		if(depth==1) {
+      		  	if(theProvider.getChildren(cls).size()>0) nm += "+";
+      		  	classMap.put(cls, nm);
+    		} else {
+    			classMap.put(cls, nm);
+      		  	int newDepth = --depth;
+      		  	ArrayList<String> supers2 = (ArrayList<String>)supers.clone();
+      		  	supers2.add(nm);
+    	        for (OWLClass sub: theProvider.getChildren(cls)) {
+    	        	setClasses(sub, newDepth, supers2);
+    	        }	
     		}
-    	}
-    	ArrayList<String> disjoints;
-    	//we only need to gather disjointness info for n-1 classes, where n is number of curves 
-    	//inside the outer curve
-    	//Use disjointness info to remove missing regions from diagram
-    	pTemp = (ArrayList<ArrayList<String>>)p.clone();
-    	int i=0;
-    	for(OWLClass c: classMap.keySet()) {
-    		if(i<=classMap.size()-1 && !c.equals(topClass)) {
-    			String nm = classMap.get(c);
-	    		NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(c);//or use TR's method
-	    		disjoints = new ArrayList<String>();
-	    		Iterator<Node<OWLClass>> it = ds.iterator();
-	    		OWLClass cls;
-	    		
-	    		while(it.hasNext()) {
-	    			cls = it.next().getRepresentativeElement();
-	    			if(classMap.keySet().contains(cls)) {
-	    				disjoints.add(classMap.get(cls));
-	    			}
-	    		}
-	    		
-	    		for(String d: disjoints) {
-    				for(ArrayList<String> ls : pTemp) {
-    					//remove missing zones but keep zones containing inconsistent classes:
-    					//these don't appear in the disjoints because the reasoner ignores them
-    					/*boolean unsat = false;
-    					for(String badLabel: inconsistentClasses) {
-    						if(ls.contains(badLabel)) {
-    							unsat = true;
-    							break;
-    						}
-    					}
-    					if(!unsat && ls.contains(nm) && ls.contains(d)) {
-    						p2.remove(ls);
-    					}*/
-    					if(ls.contains(nm) && ls.contains(d)) {
-    						p.remove(ls);
-    					}
-    				}
-    			}
+    		//collect the disjointness info
+    		NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(cls);//or use TR's method
+    		ArrayList<String> disjoints = new ArrayList<String>();
+    		Iterator<Node<OWLClass>> it = ds.iterator();
+    		OWLClass c;	
+    		while(it.hasNext()) {
+    			c = it.next().getRepresentativeElement();
+    			disjoints.add(render(c));
     		}
-    	}
-    	
-    	//look for union classes and equivalent classes so we can add shading later on
-    	HashMap<String, Set<OWLClass>> equivsInfo = new HashMap<String, Set<OWLClass>>();
-    	HashMap<String, Set<OWLClass>> unionsInfo = new HashMap<String, Set<OWLClass>>();
-    	for(OWLClass cls: classMap.keySet()) {
+    		if(disjoints.size()>0) disjointsInfo.put(nm, disjoints);
+    		//collect the equivalent classes info
     		Node<OWLClass> equivs = theReasoner.getEquivalentClasses(cls);
-    		if(!equivs.isSingleton()) {
-    			Set<OWLClass> es = equivs.getEntities();
-    			//only keep the classes in the current diagram
-    			es.retainAll(classMap.keySet());
-    			equivsInfo.put(render(cls), es);
-    		}
-    		Set<OWLOntology> onts = mgr.getActiveOntologies();
+    		if(!equivs.isSingleton()) equivsInfo.put(nm, equivs.getEntities());
+    		//collect the union classes info
     		Set<OWLEquivalentClassesAxiom> eq;
-    		for(OWLOntology ont: onts) {
+    		for(OWLOntology ont: activeOntologies) {
     			eq = ont.getEquivalentClassesAxioms(cls);
     			if(eq.size()>0) {
     	    		for(OWLEquivalentClassesAxiom a: eq) {
@@ -211,54 +149,86 @@ public class AbstractDiagramBuilder {
     	    			if(isUnion) {
     	    				Set<OWLClass> us = a.getClassesInSignature();
     	    				us.remove(cls);
-    	    				//only keep the classes in the current diagram
-    	    				us.retainAll(classMap.keySet());
     	    				if(us.size()>0) unionsInfo.put(render(cls), us);
             			}
     	    		}
         			
         		}
     		}
+    		//collect the inconsistent classes info
+        	if(!theReasoner.isSatisfiable(cls)) inconsistentClasses.add(classMap.get(cls));
     	}
-    	//add shaded zones
-    	pTemp = (ArrayList<ArrayList<String>>)p.clone();
-    	//log.info("inconsistent classes: "+inconsistentClasses);
-    	for(ArrayList<String> zone: pTemp) {
-    		if(zone.contains(EMPTY_LABEL)) {
-    			log.info(zone+" contains empty label");
-    			p.remove(zone);
-    			ArrayList<String> sz = (ArrayList<String>)zone;
+    }
+    
+    //  get zone for class and recursively all of its subclasses
+    private void setZones() {
+    	
+    	//get the Venn diagram 
+    	ArrayList<ArrayList<String>> p = powerSet(classMap.values());
+    	ArrayList<ArrayList<String>> pTemp = (ArrayList<ArrayList<String>>)p.clone();
+    	//remove various zones 
+    	for(ArrayList<String> z : pTemp) {
+    		if(!z.contains(topClassName)) {//remove zones that don't contain the outer curve
+    			p.remove(z);
+    		} else if(z.contains(EMPTY_LABEL)) {//remove inconsistent zones and shade the parent
+    			log.info(z+" contains empty label");
+    			p.remove(z);
+    			ArrayList<String> sz = (ArrayList<String>)z;
     			sz.remove(EMPTY_LABEL);
     			shadedZones.add(sz);
-    		} else {
-    			
-	    		for(String l: zone) {
-	    			//log.info("consistent?: "+l);
+    		} else {//remove zones which should be missing -- i.e. which contain disjoint classes
+    			boolean removed = false;
+    			for(String l: z) {
+    				if(disjointsInfo.containsKey(l)) {
+        				for(String d: disjointsInfo.get(l)) {
+    						if(z.contains(d)) {
+    							p.remove(z);
+    							removed = true;
+    							break;
+    						}
+        				}
+        				if(!removed) {
+        					if(supersInfo.containsKey(l)) {
+	        					for(String c: supersInfo.get(l)) {
+			    					if(!z.contains(c)) {
+			    						p.remove(z);
+		    							removed = true;
+		    							break;
+			    					}
+			    				}
+        					}
+        				}
+        			}
+    				if(removed) break;
+    			}
+        	
+    			//add shading
+	    		for(String l: z) {//shade zones that contain inconsistent classes
 	    			if(inconsistentClasses.contains(l)) {
-	    				shadedZones.add(zone);
-						break;
-	    			}
-		    		if(equivsInfo.containsKey(l)) {
+	    				shadedZones.add(z);
+	    				break;
+		    		}
+		    		if(equivsInfo.containsKey(l)) {//if l has a set of equivalent classes, S, only regions that contain l+S should be unshaded
 		    			Set<OWLClass> equivs = equivsInfo.get(l);
 		    			for(OWLClass e: equivs) {
 		    				String eNm = classMap.get(e);
-		    				if(!zone.contains(eNm)) {
-		    					shadedZones.add(zone);
+		    				if(!z.contains(eNm)) {
+		    					shadedZones.add(z);
 		    					break;
 		    				}
 		    			}
 		    		}
-		    		if(unionsInfo.containsKey(l)) {
+		    		if(unionsInfo.containsKey(l)) {//if l is a union of classes, S, regions containing l but not S should be shaded
 		    			Set<OWLClass> unions = unionsInfo.get(l);
 		    			boolean shadeMe = true;
 		    			for(OWLClass u: unions) {
 		    				String uNm = classMap.get(u);
-		    				if(zone.contains(uNm)) {
+		    				if(z.contains(uNm)) {
 		    					shadeMe = false;
 		    					break;
 		    				}
 		    			}
-		    			if(shadeMe) shadedZones.add(zone);
+		    			if(shadeMe) shadedZones.add(z);
 		    		}	
 	    		}
     		}
@@ -293,7 +263,7 @@ public class AbstractDiagramBuilder {
         }           
         return sets;
     }
-
+    
 	public ArrayList<ArrayList<String>> getZones() {
 		return zones;
 	}
