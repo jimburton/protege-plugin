@@ -22,6 +22,7 @@ import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.OWLClass;
 
 import uk.ac.brighton.vmg.conceptd.syntax.AbstractDiagramBuilder;
+import uk.ac.brighton.vmg.conceptd.syntax.AbstractDiagramBuilder2;
 
 //import uk.ac.brighton.vmg.conceptd.syntax.Zone;
 
@@ -68,13 +69,17 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 
 	@Override
 	protected OWLClass updateView(OWLClass selectedClass) {
-		DIAG_SIZE = Math.max(getHeight(), getWidth()) - 100;
+		//DIAG_SIZE = Math.max(getHeight(), getWidth()) - 100;
+		DIAG_SIZE = getHeight() - 50;
         if (selectedClass != null) {
         	AbstractDiagramBuilder builder = 
         			new AbstractDiagramBuilder(selectedClass, getOWLModelManager(), hierarchyDepth);
         	builder.build();
         	log.info("zones: "+builder.getZones());
             drawCD(builder.getZones(), builder.getShadedZones());
+        	/*AbstractDiagramBuilder2 builder2 = 
+        			new AbstractDiagramBuilder2(selectedClass, getOWLModelManager(), hierarchyDepth);
+        	builder2.build();*/
         }
         return selectedClass;
 	}

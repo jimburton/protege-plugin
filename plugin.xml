@@ -6,7 +6,7 @@
          id="ConceptDiagramViewComponent"
          point="org.protege.editor.core.application.ViewComponent">
       <label
-            value="Concept Diagrams">
+            value="ConceptViz>
       </label>
       <class
             value="uk.ac.brighton.vmg.conceptd.ui.ViewComponent">
@@ -19,7 +19,7 @@
          id="CDWorkspaceTab"
          point="org.protege.editor.core.application.WorkspaceTab">
       <label
-            value="Concept Diagrams">
+            value="ConceptViz">
       </label>
       <class
             value="uk.ac.brighton.vmg.conceptd.ui.WorkspaceTab">
