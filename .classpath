@@ -10,6 +10,8 @@
 	<classpathentry kind="lib" path="/org.protege.editor.owl/lib/xmlcatalog.jar"/>
 	<classpathentry kind="lib" path="/org.protege.editor.owl/build/classes"/>
 	<classpathentry kind="lib" path="/org.protege.editor.core.application/build/classes"/>
-	<classpathentry kind="lib" path="lib/iCircles.jar" sourcepath="/iCircles/src"/>
+	<classpathentry kind="lib" path="lib/iCircles.jar" sourcepath="/iCircles-Merge/src-ext"/>
+	<classpathentry kind="lib" path="lib/swing-worker-1.2.jar"/>
+	<classpathentry kind="lib" path="lib/jxp-1.6.1.jar"/>
 	<classpathentry kind="output" path="bin"/>
 </classpath>

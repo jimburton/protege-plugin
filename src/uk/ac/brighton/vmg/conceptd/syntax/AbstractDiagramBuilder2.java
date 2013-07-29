@@ -1,5 +1,6 @@
 package uk.ac.brighton.vmg.conceptd.syntax;
 
+import java.util.AbstractCollection;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,15 +23,15 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
 public class AbstractDiagramBuilder2 {
 
-	private ArrayList<ArrayList<String>> zones;
-	private ArrayList<ArrayList<String>> shadedZones;
-	private ArrayList<String> inconsistentClasses;
+	private Set<Zone> zones;
+	private Set<Zone> shadedZones;
+	private Set<String> inconsistentClasses;
 	private HashMap<OWLClass, String> classMap;// store the display names of
 												// classes
-	private HashMap<String, ArrayList<String>> disjointsInfo;
+	private HashMap<String, Set<String>> disjointsInfo;
 	HashMap<String, Set<OWLClass>> equivsInfo;
 	HashMap<String, Set<OWLClass>> unionsInfo;
-	HashMap<String, ArrayList<String>> supersInfo;
+	HashMap<String, Set<String>> supersInfo;
 	private int hierarchyDepth;
 	private final String EMPTY_LABEL = "Nothing";
 
@@ -77,14 +78,14 @@ public class AbstractDiagramBuilder2 {
 			topClassName = render(topClass);
 			activeOntologies = mgr.getActiveOntologies();
 
-			shadedZones = new ArrayList<ArrayList<String>>();
-			zones = new ArrayList<ArrayList<String>>();
-			inconsistentClasses = new ArrayList<String>();
+			shadedZones = new HashSet<Zone>();
+			zones = new HashSet<Zone>();
+			inconsistentClasses = new HashSet<String>();
 			classMap = new HashMap<OWLClass, String>();
-			disjointsInfo = new HashMap<String, ArrayList<String>>();
+			disjointsInfo = new HashMap<String, Set<String>>();
 			equivsInfo = new HashMap<String, Set<OWLClass>>();
 			unionsInfo = new HashMap<String, Set<OWLClass>>();
-			supersInfo = new HashMap<String, ArrayList<String>>();
+			supersInfo = new HashMap<String, Set<String>>();
 		}
 	}
 
@@ -93,129 +94,133 @@ public class AbstractDiagramBuilder2 {
 	 */
 	public void build() {
 		if (topClass != null) {
-			setClasses(topClass, hierarchyDepth, new ArrayList<String>());
+			setClasses(topClass, hierarchyDepth, new HashSet<String>());
 			log.info("classes: " + classMap.values());
 			Zone empty = new Zone(new HashSet<String>(), new HashSet<String>());
-			HashSet<Zone> zs = new HashSet<Zone>();
-			zs.add(empty);
-			Diagram d = new Diagram(zs);
-			d = addCurve(d, topClassName);
-			System.out.println("After first curve: "+d);
+			HashSet<Zone> emptyZoneSet = new HashSet<Zone>();
+			emptyZoneSet.add(empty);
+			Diagram d = new Diagram(emptyZoneSet);
+			HashSet<String> emptyCurveSet = new HashSet<String>();
+			d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet);
+			log.info("After first curve: "+d);
 			for(String l: classMap.values()) {
-				d = addCurve(d, l);
-				System.out.println(d);
+				d = addCurve(d, l, getDisjoints(l), getSupers(l));
+				log.info(d);
 			}
-			System.out.println(d);
-		}
-	}
-
-	private class Diagram {
-		private HashSet<Zone> zones;
-
-		public Diagram(HashSet<Zone> zs) {
-			zones = zs;
-		}
-
-		public HashSet<Zone> getZones() {
-			return zones;
-		}
-		public String toString() {
-			StringBuffer sb = new StringBuffer("D(");
-			for(Zone z: zones) {
-				sb.append(z.toString()).append(", ");
-			}
-			sb.append(")");
-			return sb.toString();
-		}
-
-	}
-
-	private class Zone {
-		private HashSet<String> in, out;
-
-		public Zone(HashSet<String> in, HashSet<String> out) {
-			this.in = in;
-			this.out = out;
-		}
-
-		public HashSet<String> getIn() {
-			return in;
-		}
-
-		public HashSet<String> getOut() {
-			return out;
-		}
-		
-		public String toString() {
-			return "("+in.toString()+", "+out.toString()+")";
+			log.info(d);
+			zones = d.getZones();
 		}
 	}
 	
-	public <T> Set<T> intersect(Set<T> list1, List<T> list2) {
-        Set<T> list = new HashSet<T>();
-
-        for (T t : list1) {
-            if(list2.contains(t)) {
-                list.add(t);
-            }
-        }
-
-        return list;
-    }
+	private Set<String> getDisjoints(String label) {
+		return (disjointsInfo.containsKey(label)) ? disjointsInfo.get(label) : new HashSet<String>();
+	}
+	
+	private Set<String> getSupers(String label) {
+		return (supersInfo.containsKey(label)) ? supersInfo.get(label) : new HashSet<String>();
+	}
+	
+	private <T> String stringSet(Set<T> s) {
+		StringBuilder sb = new StringBuilder("{");
+		for(T e: s) {
+			sb.append(e.toString());
+			sb.append(", ");
+		}
+		sb.append("}");
+		return sb.toString();
+	}
 	
 	/*
-	 * Scala implementation that works:
+	 * Working Scala implementation of addCurve:
 
   def addCurve(d: Diagram, l: String, disjoints: List[String], supers: List[String]): Diagram = {
     val zs = d.zones
     val (z_out, z_in, z_split) = zs.foldLeft((List[Zone](), List[Zone](), List[Zone]()))((res, z) => {
       val is_out = !z.in.intersect(disjoints).isEmpty || !z.out.intersect(supers).isEmpty
-      val is_in = !z.in.intersect(supers).isEmpty
-      val o = if (is_out) z :: res._1 else res._1
-      val i = if (is_in) z :: res._2 else res._2
-      val s = if (is_in || is_out) res._3 else z :: res._3
-      (o, i, s)
+    	val is_in = !z.in.intersect(supers).isEmpty
+    	val o = if (is_out) z :: res._1 else res._1
+    	val i = if (is_in) z :: res._2 else res._2
+    	val s = if (is_in || is_out) res._3 else z :: res._3
+    	(o, i, s)
     })
     val o2 = z_out.map(z => new Zone(z.in, l :: z.out))
     val i2 = z_in.map(z => new Zone(l :: z.in, z.out))
     val s2 = z_split.flatMap(z => Set(new Zone(l :: z.in, z.out), new Zone(z.in, l :: z.out)))
-    new Diagram(o2 union i2 union s2)
+    new Diagram(o2 ++ i2 ++ s2)
+  }
   }
 	 */
-
-	private Diagram addCurve(Diagram d, String l) {
-		System.out.println("Adding: "+l);
-		System.out.println("topClassName: "+topClassName);
-		HashSet<Zone> zs = d.getZones();
-		ArrayList<String> disjoints = disjointsInfo.get(l);
-		ArrayList<String> supers = supersInfo.get(l);
-		HashSet<Zone> z_in = new HashSet<Zone>();
-		HashSet<Zone> z_out = new HashSet<Zone>();
-		HashSet<Zone> z_split = new HashSet<Zone>();
+	private Diagram addCurve(Diagram d, String label, Set<String> disjoints, Set<String> supers) {
+		log.info("Adding :::::::  "+label+"  :::::::");
+		if(d.getLabels().contains(label)) {
+			log.info("Nothing to do");
+			return d;
+		}
+		log.info(label + " is disjoint from " + stringSet(disjoints) + " and has supers " + stringSet(supers));
+		Set<Zone> zs = d.getZones();
+		
+		Set<Zone> z_in = new HashSet<Zone>();
+		Set<Zone> z_out = new HashSet<Zone>();
+		Set<Zone> z_split = new HashSet<Zone>();
+		Set<Zone> z_all = new HashSet<Zone>();
 		boolean is_out, is_in;
-		HashSet<String> old_out, old_in;
-		for (Zone z : zs) {
-			old_in = z.getIn();
-			old_out = z.getOut();
-			is_out = !intersect(old_in, disjoints).isEmpty()
-					|| !intersect(old_out, supers).isEmpty();
-			is_in = !intersect(old_in, supers).isEmpty();
-			if (is_out) {
-				z_out.add(z);
-			}
-			if (is_in) {
+		for(Zone z: zs) {
+			is_out = !isDisjoint(z.getIn(), disjoints) || !isDisjoint(z.getOut(), supers);
+			is_in = !isDisjoint(z.getIn(), supers);
+			if(is_in) {
+				log.info(z + " is IN");
 				z_in.add(z);
 			}
-			if (!(is_out || is_in)) {
+			if(is_out) {
+				log.info(z + " is OUT");
+				z_out.add(z);
+			}
+			if(!(is_in || is_out)) {
+				log.info(z + " is SPLIT");
 				z_split.add(z);
 			}
 		}
-		for(Zone z: z_out) {
-			
+		Zone z1, z2;
+		Set<Zone> z_tmp = new HashSet<Zone>();
+		
+		for(Zone z: z_in) {
+			z1 = new Zone(z);
+			z2 = new Zone(z);
+			z1.getIn().add(label);
+			z2.getOut().add(label);
+			z_tmp.add(z1);
+			z_tmp.add(z2);
 		}
-		z_out.addAll(z_in);
-		z_out.addAll(z_split);
-		return new Diagram(z_out);
+		z_in = z_tmp;
+		z_tmp = new HashSet<Zone>();
+		
+		for(Zone z: z_out) z.getOut().add(label);
+		
+		for(Zone z: z_split) {
+			z1 = new Zone(z);
+			z2 = new Zone(z);
+			z1.getIn().add(label);
+			z2.getOut().add(label);
+			z_tmp.add(z1);
+			z_tmp.add(z2);
+		}
+		z_split = z_tmp;
+		///////////////////
+		log.info("IN");
+		for(Zone z: z_in) log.info(z);
+		log.info("OUT");
+		for(Zone z: z_out) log.info(z);
+		log.info("SPLIT");
+		for(Zone z: z_split) log.info(z);
+		///////////////////
+		z_all = z_in;
+		z_all.addAll(z_out);
+		z_all.addAll(z_split);
+		///////////////////
+		log.info("EVERYTHING");
+		for(Zone z: z_all) log.info(z);
+		///////////////////
+		return new Diagram(z_all);
 	}
 
 	/**
@@ -224,7 +229,7 @@ public class AbstractDiagramBuilder2 {
 	 * 
 	 * @param selectedClass
 	 */
-	private void setClasses(OWLClass cls, int depth, ArrayList<String> supers) {
+	private void setClasses(OWLClass cls, int depth, Set<String> supers) {
 
 		if (depth > 0) {
 			String nm = render(cls);
@@ -236,7 +241,7 @@ public class AbstractDiagramBuilder2 {
 			} else {
 				classMap.put(cls, nm);
 				int newDepth = --depth;
-				ArrayList<String> supers2 = (ArrayList<String>) supers.clone();
+				Set<String> supers2 = new HashSet<String>(supers);
 				supers2.add(nm);
 				for (OWLClass sub : theProvider.getChildren(cls)) {
 					setClasses(sub, newDepth, supers2);
@@ -246,7 +251,7 @@ public class AbstractDiagramBuilder2 {
 			NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(cls);// or use
 																		// TR's
 																		// method
-			ArrayList<String> disjoints = new ArrayList<String>();
+			Set<String> disjoints = new HashSet<String>();
 			Iterator<Node<OWLClass>> it = ds.iterator();
 			OWLClass c;
 			while (it.hasNext()) {
@@ -295,12 +300,22 @@ public class AbstractDiagramBuilder2 {
 		return ren.render(cls).replaceAll("'", "").replaceAll(" ", "");
 	}
 
-	public ArrayList<ArrayList<String>> getZones() {
+	public Set<Zone> getZones() {
 		return zones;
 	}
 
-	public ArrayList<ArrayList<String>> getShadedZones() {
+	public Set<Zone> getShadedZones() {
 		return shadedZones;
 	}
+	
+	public <T> Set<T> intersect(Set<T> set1, Set<T> set2) {
+		Set<T> intersection = new HashSet<T>(set1);
+		intersection.retainAll(set2);
+        return intersection;
+    }
+	
+	public <T> boolean isDisjoint(Set<T> set1, Set<T> set2) {
+        return intersect(set1, set2).isEmpty();
+    }
 
 }

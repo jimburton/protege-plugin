@@ -1,12 +1,11 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<?eclipse version="3.0"?>
-
 <plugin>
+<!-- <?eclipse version="3.0"?> -->
    <extension
          id="ConceptDiagramViewComponent"
          point="org.protege.editor.core.application.ViewComponent">
       <label
-            value="ConceptViz>
+            value="ConceptViz">
       </label>
       <class
             value="uk.ac.brighton.vmg.conceptd.ui.ViewComponent">
@@ -25,7 +24,7 @@
             value="uk.ac.brighton.vmg.conceptd.ui.WorkspaceTab">
       </class>
       <index
-            value="X">
+            value="0.1">
       </index>
       <editorKitId
             value="OWLEditorKit">
@@ -34,6 +33,4 @@
             value="viewconfig-CDTab.xml">
       </defaultViewConfigFileName>
    </extension>
-
-
 </plugin>

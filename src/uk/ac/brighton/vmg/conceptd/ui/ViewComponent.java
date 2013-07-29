@@ -12,6 +12,7 @@ import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.util.ArrayList;
+import java.util.Set;
 
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -21,15 +22,15 @@ import org.apache.log4j.Logger;
 import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.OWLClass;
 
-import uk.ac.brighton.vmg.conceptd.syntax.AbstractDiagramBuilder;
 import uk.ac.brighton.vmg.conceptd.syntax.AbstractDiagramBuilder2;
+import uk.ac.brighton.vmg.conceptd.syntax.Zone;
 
 //import uk.ac.brighton.vmg.conceptd.syntax.Zone;
 
 public class ViewComponent extends AbstractOWLClassViewComponent {
     private static final long serialVersionUID = -4515710047558710080L;
     private JPanel cdPanel;
-    private JComboBox depthPicker;
+    private JComboBox<String> depthPicker;
     
     private int DIAG_SIZE;
     private final double DIAG_SCALE = 0.9;
@@ -50,11 +51,11 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		JPanel topPanel = new JPanel();
 		JLabel depthLabel = new JLabel("Depth:");
 		String[] depths = { "1", "2", "3", "4", "5" };
-		depthPicker = new JComboBox(depths);
+		depthPicker = new JComboBox<String>(depths);
 		depthPicker.setSelectedIndex(1);
 		depthPicker.addActionListener(new ActionListener() {
 	        public void actionPerformed(ActionEvent e) {
-	            hierarchyDepth = Integer.parseInt((String)depthPicker.getSelectedItem());
+	            hierarchyDepth = Integer.parseInt((String) depthPicker.getSelectedItem());
 	        }
 	    });
 		topPanel.add(depthLabel);
@@ -72,26 +73,27 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		//DIAG_SIZE = Math.max(getHeight(), getWidth()) - 100;
 		DIAG_SIZE = getHeight() - 50;
         if (selectedClass != null) {
-        	AbstractDiagramBuilder builder = 
+        	/*AbstractDiagramBuilder builder = 
         			new AbstractDiagramBuilder(selectedClass, getOWLModelManager(), hierarchyDepth);
         	builder.build();
-        	log.info("zones: "+builder.getZones());
-            drawCD(builder.getZones(), builder.getShadedZones());
-        	/*AbstractDiagramBuilder2 builder2 = 
+        	*/
+        	AbstractDiagramBuilder2 builder2 = 
         			new AbstractDiagramBuilder2(selectedClass, getOWLModelManager(), hierarchyDepth);
-        	builder2.build();*/
+        	builder2.build();
+        	log.info("zones: "+builder2.getZones());
+            drawCD(builder2.getZones(), builder2.getShadedZones());
         }
         return selectedClass;
 	}
 	
-	private void drawCD(ArrayList<ArrayList<String>> z, ArrayList<ArrayList<String>> sz) {
+	private void drawCD(Set<Zone> z, Set<Zone> sz) {
 		//log.info("drawing CD");
 		cdPanel.removeAll();
 		cdPanel.add(getCDPanel(z, sz));
 	}
     
     
-    private JPanel getCDPanel(ArrayList<ArrayList<String>> z, ArrayList<ArrayList<String>> sz) {
+    private JPanel getCDPanel(Set<Zone> z, Set<Zone> sz) {
         //log.info("drawing diagram " + desc);
         Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC,  16);
 
@@ -100,50 +102,26 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         try {
             cd = getDiagram(z, sz);
             cd.setFont(font);
+            CirclesPanel cp = new CirclesPanel("", failureMessage, cd,
+                    true);// do use colours
+            cp.setScaleFactor(DIAG_SCALE);
+            return cp;
         } catch (CannotDrawException x) {
-            failureMessage = x.message;
-        }
-
-        CirclesPanel cp = new CirclesPanel("", failureMessage, cd,
-                true);// do use colours
-        cp.setScaleFactor(DIAG_SCALE);
-        return cp;
+        	log.error(x.message);
+            return new JPanel();
+        }   
     }
 
-    private ConcreteDiagram getDiagram(ArrayList<ArrayList<String>> z, ArrayList<ArrayList<String>> sz) 
+    private ConcreteDiagram getDiagram(Set<Zone> zSet, Set<Zone> szSet) 
     		throws CannotDrawException {
-      	AbstractDescription ad = AbstractDescription.makeForTesting(z, sz); 
+    	ArrayList<ArrayList<String>> zs = new ArrayList<ArrayList<String>>();
+    	for(Zone z: zSet) zs.add(new ArrayList<String>(z.getIn()));
+    	ArrayList<ArrayList<String>> szs = new ArrayList<ArrayList<String>>(); 
+    	for(Zone z: szSet) szs.add(new ArrayList<String>(z.getIn()));
+      	AbstractDescription ad = AbstractDescription.makeForTesting(zs, szs); 
       	DiagramCreator dc = new DiagramCreator(ad);
         ConcreteDiagram cd = dc.createDiagram(DIAG_SIZE);
         return cd;
     }
-    
-    
-    /*private void writeZonesFirstPass(OWLClass selectedClass, TreeSet<AbstractCurve> z) {
-    	//strip quotes
-    	String name = ren.render(selectedClass).replaceAll("'", "");
-    	AbstractCurve ac = new AbstractCurve(new CurveLabel(name));
-    	TreeSet<AbstractCurve> z2 = (TreeSet<AbstractCurve>)z.clone();
-        z2.add(ac);
-        zones_old.add(new AbstractBasicRegion(z2));
-        // the hierarchy provider gets subclasses for us
-        for (OWLClass sub: theProvider.getChildren(selectedClass)){
-        	if (!(sub == null) && sub.isOWLNothing()) {
-        		shadedZones.add(new AbstractBasicRegion(z2));
-        	} else {
-        		writeZonesFirstPass(sub, z2);
-        	}
-        }
-    }*/
-    
-//	private Set getDisjoints(OWLReasoner reasoner, OWLClass cls) {
-//	OWLDataFactory factory = reasoner.getRootOntology().getOWLOntologyManager().getOWLDataFactory();
-//	OWLClassExpression complement = factory.getOWLObjectComplementOf(cls);
-//	Set<OWLClass> equivalentToComplement = reasoner.getEquivalentClasses(complement).getEntities();
-//	if(!equivalentToComplement.isEmpty()) {
-//		return equivalentToComplement;
-//	} else {
-//		return reasoner.getSubClasses(complement, true).getFlattened();
-//	}
-//}
+
 }
