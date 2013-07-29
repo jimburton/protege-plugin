@@ -5,10 +5,12 @@ import java.util.Set;
 
 public class Diagram {
 	private Set<Zone> zones;
+	private Set<Zone> shadedZones;
 	private Set<String> labels;
 
-	public Diagram(Set<Zone> zs) {
+	public Diagram(Set<Zone> zs, Set<Zone> sz) {
 		zones = zs;
+		shadedZones = sz;
 		for(Zone z: zones) {
 			labels = new HashSet<String>(z.getIn());
 			labels.addAll(z.getOut());
@@ -31,6 +33,10 @@ public class Diagram {
 		}
 		sb.append(")");
 		return sb.toString();
+	}
+
+	Set<Zone> getShadedZones() {
+		return shadedZones;
 	}
 
 }

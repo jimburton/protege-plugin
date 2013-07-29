@@ -99,7 +99,7 @@ public class AbstractDiagramBuilder2 {
 			Zone empty = new Zone(new HashSet<String>(), new HashSet<String>());
 			HashSet<Zone> emptyZoneSet = new HashSet<Zone>();
 			emptyZoneSet.add(empty);
-			Diagram d = new Diagram(emptyZoneSet);
+			Diagram d = new Diagram(emptyZoneSet, new HashSet<Zone>(emptyZoneSet));
 			HashSet<String> emptyCurveSet = new HashSet<String>();
 			d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet);
 			log.info("After first curve: "+d);
@@ -109,25 +109,8 @@ public class AbstractDiagramBuilder2 {
 			}
 			log.info(d);
 			zones = d.getZones();
+			shadedZones = d.getShadedZones();
 		}
-	}
-	
-	private Set<String> getDisjoints(String label) {
-		return (disjointsInfo.containsKey(label)) ? disjointsInfo.get(label) : new HashSet<String>();
-	}
-	
-	private Set<String> getSupers(String label) {
-		return (supersInfo.containsKey(label)) ? supersInfo.get(label) : new HashSet<String>();
-	}
-	
-	private <T> String stringSet(Set<T> s) {
-		StringBuilder sb = new StringBuilder("{");
-		for(T e: s) {
-			sb.append(e.toString());
-			sb.append(", ");
-		}
-		sb.append("}");
-		return sb.toString();
 	}
 	
 	/*
@@ -158,11 +141,13 @@ public class AbstractDiagramBuilder2 {
 		}
 		log.info(label + " is disjoint from " + stringSet(disjoints) + " and has supers " + stringSet(supers));
 		Set<Zone> zs = d.getZones();
+		Set<Zone> z_shaded = new HashSet<Zone>();
 		
 		Set<Zone> z_in = new HashSet<Zone>();
 		Set<Zone> z_out = new HashSet<Zone>();
 		Set<Zone> z_split = new HashSet<Zone>();
 		Set<Zone> z_all = new HashSet<Zone>();
+
 		boolean is_out, is_in;
 		for(Zone z: zs) {
 			is_out = !isDisjoint(z.getIn(), disjoints) || !isDisjoint(z.getOut(), supers);
@@ -190,11 +175,16 @@ public class AbstractDiagramBuilder2 {
 			z2.getOut().add(label);
 			z_tmp.add(z1);
 			z_tmp.add(z2);
+			if(d.getShadedZones().contains(z)) z_shaded.add(z2);
 		}
 		z_in = z_tmp;
 		z_tmp = new HashSet<Zone>();
 		
-		for(Zone z: z_out) z.getOut().add(label);
+		for(Zone z: z_out) {
+			z1 = new Zone(z);
+			z1.getOut().add(label);
+			if(d.getShadedZones().contains(z)) z_shaded.add(z1);
+		}
 		
 		for(Zone z: z_split) {
 			z1 = new Zone(z);
@@ -220,7 +210,45 @@ public class AbstractDiagramBuilder2 {
 		log.info("EVERYTHING");
 		for(Zone z: z_all) log.info(z);
 		///////////////////
-		return new Diagram(z_all);
+		// Shading and inconsistency
+		for(Zone z: z_all) {
+			for(String l: z.getIn()) {
+				if(inconsistentClasses.contains(l)) {
+					z_shaded.add(z);
+					break;
+				}
+				boolean shadeMe = false;
+				if(equivsInfo.containsKey(l)) {
+					for(OWLClass e: equivsInfo.get(l)) {
+	    				String eNm = classMap.get(e);
+	    				if(!z.getIn().contains(eNm)) {
+	    					shadeMe = true;
+	    					break;
+	    				}
+	    			}
+					if(shadeMe) {
+						z_shaded.add(z);
+						break;
+					}
+				}
+				if(unionsInfo.containsKey(l)) {//if l is a union of classes, S, regions containing l but not S should be shaded
+	    			Set<OWLClass> unions = unionsInfo.get(l);
+	    			shadeMe = true;
+	    			for(OWLClass u: unions) {
+	    				String uNm = classMap.get(u);
+	    				if(z.getIn().contains(uNm)) {
+	    					shadeMe = false;
+	    					break;
+	    				}
+	    			}
+	    			if(shadeMe) {
+	    				z_shaded.add(z);
+	    				break;
+	    			}
+	    		}
+			}
+		}
+		return new Diagram(z_all, z_shaded);
 	}
 
 	/**
@@ -317,5 +345,23 @@ public class AbstractDiagramBuilder2 {
 	public <T> boolean isDisjoint(Set<T> set1, Set<T> set2) {
         return intersect(set1, set2).isEmpty();
     }
+	
+	private Set<String> getDisjoints(String label) {
+		return (disjointsInfo.containsKey(label)) ? disjointsInfo.get(label) : new HashSet<String>();
+	}
+	
+	private Set<String> getSupers(String label) {
+		return (supersInfo.containsKey(label)) ? supersInfo.get(label) : new HashSet<String>();
+	}
+	
+	private <T> String stringSet(Set<T> s) {
+		StringBuilder sb = new StringBuilder("{");
+		for(T e: s) {
+			sb.append(e.toString());
+			sb.append(", ");
+		}
+		sb.append("}");
+		return sb.toString();
+	}
 
 }
