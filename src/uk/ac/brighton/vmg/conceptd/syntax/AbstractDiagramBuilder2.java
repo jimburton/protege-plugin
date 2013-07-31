@@ -143,82 +143,51 @@ public class AbstractDiagramBuilder2 {
 			// log.info("Nothing to do");
 			return d;
 		}
-		// log.info(label + " is disjoint from " + stringSet(disjoints) +
-		// " and has supers " + stringSet(supers));
+		log.info(label + " is disjoint from " + disjoints +
+		" and has supers " + supers);
 		Set<Zone> zs = d.getZones();
 		Set<Zone> z_shaded = new HashSet<Zone>();
-
-		Set<Zone> z_in = new HashSet<Zone>();
-		Set<Zone> z_out = new HashSet<Zone>();
-		Set<Zone> z_split = new HashSet<Zone>();
 		Set<Zone> z_all = new HashSet<Zone>();
 
 		boolean is_out, is_in;
+		Zone z1, z2;
+		
 		for (Zone z : zs) {
+			log.info("Adding "+label+" to "+z);
 			is_out = !isDisjoint(z.getIn(), disjoints)
 					|| !isDisjoint(z.getOut(), supers);
 			is_in = !isDisjoint(z.getIn(), supers);
 			if (is_in) {
-				// log.info(z + " is IN");
-				z_in.add(z);
+				log.info(z + " is IN");
+				z1 = new Zone(z);
+				z2 = new Zone(z);
+				z1.getIn().add(label);
+				z2.getOut().add(label);
+				z_all.add(z1);
+				z_all.add(z2);
+				if (d.getShadedZones().contains(z)) {
+					z_shaded.add(z2);
+				}
 			}
 			if (is_out) {
-				// log.info(z + " is OUT");
-				z_out.add(z);
+				log.info(z + " is OUT");
+				z1 = new Zone(z);
+				z1.getOut().add(label);
+				z_all.add(z1);
+				if (d.getShadedZones().contains(z)) {
+					z_shaded.add(z1);
+				}
 			}
 			if (!(is_in || is_out)) {
-				// log.info(z + " is SPLIT");
-				z_split.add(z);
+				log.info(z + " is SPLIT");
+				z1 = new Zone(z);
+				z2 = new Zone(z);
+				z1.getIn().add(label);
+				z2.getOut().add(label);
+				z_all.add(z1);
+				z_all.add(z2);
 			}
 		}
-		Zone z1, z2;
-		Set<Zone> z_tmp = new HashSet<Zone>();
-
-		for (Zone z : z_in) {
-			z1 = new Zone(z);
-			z2 = new Zone(z);
-			z1.getIn().add(label);
-			z2.getOut().add(label);
-			z_tmp.add(z1);
-			z_tmp.add(z2);
-			if (d.getShadedZones().contains(z))
-				z_shaded.add(z2);
-		}
-		z_in = z_tmp;
-		z_tmp = new HashSet<Zone>();
-
-		for (Zone z : z_out) {
-			z1 = new Zone(z);
-			z1.getOut().add(label);
-			z_tmp.add(z1);
-			if (d.getShadedZones().contains(z))
-				z_shaded.add(z1);
-		}
-		z_out = z_tmp;
-
-		for (Zone z : z_split) {
-			z1 = new Zone(z);
-			z2 = new Zone(z);
-			z1.getIn().add(label);
-			z2.getOut().add(label);
-			z_tmp.add(z1);
-			z_tmp.add(z2);
-		}
-		z_split = z_tmp;
-		// /////////////////
-		// log.info("IN");
-		// for(Zone z: z_in) log.info(z);
-		// log.info("OUT");
-		// for(Zone z: z_out) log.info(z);
-		// log.info("SPLIT");
-		// for(Zone z: z_split) log.info(z);
-		// /////////////////
-		z_all = z_in;
-		z_all.addAll(z_out);
-		z_all.addAll(z_split);
-		// /////////////////
-		// log.info("EVERYTHING");
-		// for(Zone z: z_all) log.info(z);
 		// /////////////////
 		// Shading and inconsistency
 		for (Zone z : z_all) {
@@ -262,6 +231,46 @@ public class AbstractDiagramBuilder2 {
 		}
 		return new Diagram(z_all, z_shaded);
 	}
+	
+	/*private void addToShadedZones(Zone z, Set<Zone> z_shaded) {
+		for (String l : z.getIn()) {
+			if (inconsistentClasses.contains(l)) {
+				z_shaded.add(z);
+				break;
+			}
+			boolean shadeMe = false;
+			if (equivsInfo.containsKey(l)) {
+				for (OWLClass e : equivsInfo.get(l)) {
+					String eNm = classMap.get(e);
+					if (!z.getIn().contains(eNm)) {
+						shadeMe = true;
+						break;
+					}
+				}
+				if (shadeMe) {
+					z_shaded.add(z);
+					break;
+				}
+			}
+			if (unionsInfo.containsKey(l)) {// if l is a union of classes,
+											// S, regions containing l but
+											// not S should be shaded
+				Set<OWLClass> unions = unionsInfo.get(l);
+				shadeMe = true;
+				for (OWLClass u : unions) {
+					String uNm = classMap.get(u);
+					if (z.getIn().contains(uNm)) {
+						shadeMe = false;
+						break;
+					}
+				}
+				if (shadeMe) {
+					z_shaded.add(z);
+					break;
+				}
+			}
+		}
+	}*/
 
 	/**
 	 * Collect the list of curve labels in the diagram, along with info on
@@ -273,12 +282,14 @@ public class AbstractDiagramBuilder2 {
 
 		if (depth > 0) {
 			String nm = render(cls);
-			supersInfo.put(nm, supers);
 			if (depth == 1) {
-				if (theProvider.getChildren(cls).size() > 0)
+				if (theProvider.getChildren(cls).size() > 0) {
 					nm += "+";
+				}
+				supersInfo.put(nm, supers);
 				classMap.put(cls, nm);
 			} else {
+				supersInfo.put(nm, supers);
 				classMap.put(cls, nm);
 				int newDepth = --depth;
 				Set<String> supers2 = new HashSet<String>(supers);
@@ -327,7 +338,6 @@ public class AbstractDiagramBuilder2 {
 								unionsInfo.put(render(cls), us);
 						}
 					}
-
 				}
 			}
 			// collect the inconsistent classes info
