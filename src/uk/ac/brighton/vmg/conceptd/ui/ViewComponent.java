@@ -1,9 +1,10 @@
 package uk.ac.brighton.vmg.conceptd.ui;
 
-import icircles.abstractDescription.AbstractDescription;
 import icircles.concreteDiagram.ConcreteDiagram;
 import icircles.concreteDiagram.DiagramCreator;
 import icircles.gui.CirclesPanel;
+import icircles.input.AbstractDiagram;
+import icircles.input.Spider;
 import icircles.util.CannotDrawException;
 
 import java.awt.BorderLayout;
@@ -11,8 +12,6 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.ArrayList;
-import java.util.Set;
 
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
@@ -23,7 +22,6 @@ import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.OWLClass;
 
 import uk.ac.brighton.vmg.conceptd.syntax.AbstractDiagramBuilder2;
-import uk.ac.brighton.vmg.conceptd.syntax.Zone;
 
 //import uk.ac.brighton.vmg.conceptd.syntax.Zone;
 
@@ -37,6 +35,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
     private int hierarchyDepth = 2;
     
     private static final Logger log = Logger.getLogger(ViewComponent.class);
+	private static final int IC_VERSION = 1;
 
 	@Override
 	public void disposeView() {
@@ -80,27 +79,33 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         	AbstractDiagramBuilder2 builder2 = 
         			new AbstractDiagramBuilder2(selectedClass, getOWLModelManager(), hierarchyDepth);
         	builder2.build();
-        	log.info("zones: "+builder2.getZones());
-            drawCD(builder2.getZones(), builder2.getShadedZones());
+        	String[] cs = builder2.getCurves();
+        	icircles.input.Zone[] zs = builder2.getZones();
+        	icircles.input.Zone[] szs = builder2.getShadedZones();
+        	debug("Curves", cs);
+        	debug("Zones", zs);
+        	debug("Shaded zones", szs);
+        	drawCD(cs, zs, szs);
+            //drawCD(builder2.getCurves(), builder2.getZones(), builder2.getShadedZones()); 
         }
         return selectedClass;
 	}
 	
-	private void drawCD(Set<Zone> z, Set<Zone> sz) {
+	private void drawCD(String[] c, icircles.input.Zone[] z, icircles.input.Zone[] sz) {
 		//log.info("drawing CD");
 		cdPanel.removeAll();
-		cdPanel.add(getCDPanel(z, sz));
+		cdPanel.add(getCDPanel(c, z, sz));
 	}
     
     
-    private JPanel getCDPanel(Set<Zone> z, Set<Zone> sz) {
+    private JPanel getCDPanel(String[] c, icircles.input.Zone[] z, icircles.input.Zone[] sz) {
         //log.info("drawing diagram " + desc);
         Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC,  16);
 
         ConcreteDiagram cd = null;
         String failureMessage = null; 
         try {
-            cd = getDiagram(z, sz);
+            cd = getDiagram(c, z, sz);
             cd.setFont(font);
             CirclesPanel cp = new CirclesPanel("", failureMessage, cd,
                     true);// do use colours
@@ -112,16 +117,17 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
         }   
     }
 
-    private ConcreteDiagram getDiagram(Set<Zone> zSet, Set<Zone> szSet) 
+    private ConcreteDiagram getDiagram(String[] c, icircles.input.Zone[] z, icircles.input.Zone[] sz) 
     		throws CannotDrawException {
-    	ArrayList<ArrayList<String>> zs = new ArrayList<ArrayList<String>>();
-    	for(Zone z: zSet) zs.add(new ArrayList<String>(z.getIn()));
-    	ArrayList<ArrayList<String>> szs = new ArrayList<ArrayList<String>>(); 
-    	for(Zone z: szSet) szs.add(new ArrayList<String>(z.getIn()));
-      	AbstractDescription ad = AbstractDescription.makeForTesting(zs, szs); 
-      	DiagramCreator dc = new DiagramCreator(ad);
+      	AbstractDiagram ad = new AbstractDiagram(IC_VERSION, c, z, sz, new Spider[]{}); 
+      	DiagramCreator dc = new DiagramCreator(ad.toAbstractDescription());
         ConcreteDiagram cd = dc.createDiagram(DIAG_SIZE);
         return cd;
+    }
+    
+    private <T> void debug(String name, Object[] xs) {
+    	log.info("::::::::::   "+name+"   ::::::::::");
+    	for(Object x: xs) log.info(x.toString());
     }
 
 }

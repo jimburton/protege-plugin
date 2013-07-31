@@ -7,7 +7,7 @@ Bundle-ContactAddress: ontoed@brighton.ac.uk
 Bundle-DocURL: http://www.ontologyengineering.org
 Bundle-Description: A visualisation plugin using concept diagrams
 Bundle-Vendor: Visual Modelling Group 
-Bundle-ClassPath: .,lib/iCircles.jar,lib/jxp-1.6.1.jar,lib/swing-worker-1.2.jar
+Bundle-ClassPath: .,lib/iCircles-1.0.jar,lib/jxp-1.6.1.jar,lib/swing-worker-1.2.jar
 Import-Package: org.osgi.framework,
  org.apache.log4j,
  javax.swing,

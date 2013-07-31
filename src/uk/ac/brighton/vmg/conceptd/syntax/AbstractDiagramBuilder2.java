@@ -1,11 +1,15 @@
 package uk.ac.brighton.vmg.conceptd.syntax;
 
-import java.util.AbstractCollection;
+import icircles.abstractDescription.AbstractBasicRegion;
+import icircles.abstractDescription.AbstractCurve;
+import icircles.abstractDescription.CurveLabel;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.log4j.Logger;
@@ -25,13 +29,15 @@ public class AbstractDiagramBuilder2 {
 
 	private Set<Zone> zones;
 	private Set<Zone> shadedZones;
+	private Set<String> curves;
+
 	private Set<String> inconsistentClasses;
-	private HashMap<OWLClass, String> classMap;// store the display names of
-												// classes
-	private HashMap<String, Set<String>> disjointsInfo;
-	HashMap<String, Set<OWLClass>> equivsInfo;
-	HashMap<String, Set<OWLClass>> unionsInfo;
-	HashMap<String, Set<String>> supersInfo;
+	private Map<OWLClass, String> classMap;// store the display names of
+											// classes
+	private Map<String, Set<String>> disjointsInfo;
+	private Map<String, Set<OWLClass>> equivsInfo;
+	private Map<String, Set<OWLClass>> unionsInfo;
+	private Map<String, Set<String>> supersInfo;
 	private int hierarchyDepth;
 	private final String EMPTY_LABEL = "Nothing";
 
@@ -95,98 +101,102 @@ public class AbstractDiagramBuilder2 {
 	public void build() {
 		if (topClass != null) {
 			setClasses(topClass, hierarchyDepth, new HashSet<String>());
-			log.info("classes: " + classMap.values());
+			// log.info("classes: " + classMap.values());
 			Zone empty = new Zone(new HashSet<String>(), new HashSet<String>());
-			HashSet<Zone> emptyZoneSet = new HashSet<Zone>();
+			Set<Zone> emptyZoneSet = new HashSet<Zone>();
 			emptyZoneSet.add(empty);
-			Diagram d = new Diagram(emptyZoneSet, new HashSet<Zone>(emptyZoneSet));
-			HashSet<String> emptyCurveSet = new HashSet<String>();
+			Diagram d = new Diagram(emptyZoneSet, new HashSet<Zone>(
+					emptyZoneSet));
+			Set<String> emptyCurveSet = new HashSet<String>();
 			d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet);
-			log.info("After first curve: "+d);
-			for(String l: classMap.values()) {
+			// log.info("After first curve: "+d);
+			for (String l : classMap.values()) {
 				d = addCurve(d, l, getDisjoints(l), getSupers(l));
-				log.info(d);
+				// log.info(d);
 			}
-			log.info(d);
+			// log.info(d);
+			curves = d.getCurves();
 			zones = d.getZones();
 			shadedZones = d.getShadedZones();
 		}
 	}
-	
+
 	/*
 	 * Working Scala implementation of addCurve:
-
-  def addCurve(d: Diagram, l: String, disjoints: List[String], supers: List[String]): Diagram = {
-    val zs = d.zones
-    val (z_out, z_in, z_split) = zs.foldLeft((List[Zone](), List[Zone](), List[Zone]()))((res, z) => {
-      val is_out = !z.in.intersect(disjoints).isEmpty || !z.out.intersect(supers).isEmpty
-    	val is_in = !z.in.intersect(supers).isEmpty
-    	val o = if (is_out) z :: res._1 else res._1
-    	val i = if (is_in) z :: res._2 else res._2
-    	val s = if (is_in || is_out) res._3 else z :: res._3
-    	(o, i, s)
-    })
-    val o2 = z_out.map(z => new Zone(z.in, l :: z.out))
-    val i2 = z_in.map(z => new Zone(l :: z.in, z.out))
-    val s2 = z_split.flatMap(z => Set(new Zone(l :: z.in, z.out), new Zone(z.in, l :: z.out)))
-    new Diagram(o2 ++ i2 ++ s2)
-  }
-  }
+	 * 
+	 * def addCurve(d: Diagram, l: String, disjoints: List[String], supers:
+	 * List[String]): Diagram = { val zs = d.zones val (z_out, z_in, z_split) =
+	 * zs.foldLeft((List[Zone](), List[Zone](), List[Zone]()))((res, z) => { val
+	 * is_out = !z.in.intersect(disjoints).isEmpty ||
+	 * !z.out.intersect(supers).isEmpty val is_in =
+	 * !z.in.intersect(supers).isEmpty val o = if (is_out) z :: res._1 else
+	 * res._1 val i = if (is_in) z :: res._2 else res._2 val s = if (is_in ||
+	 * is_out) res._3 else z :: res._3 (o, i, s) }) val o2 = z_out.map(z => new
+	 * Zone(z.in, l :: z.out)) val i2 = z_in.map(z => new Zone(l :: z.in,
+	 * z.out)) val s2 = z_split.flatMap(z => Set(new Zone(l :: z.in, z.out), new
+	 * Zone(z.in, l :: z.out))) new Diagram(o2 ++ i2 ++ s2) } }
 	 */
-	private Diagram addCurve(Diagram d, String label, Set<String> disjoints, Set<String> supers) {
-		log.info("Adding :::::::  "+label+"  :::::::");
-		if(d.getLabels().contains(label)) {
-			log.info("Nothing to do");
+	private Diagram addCurve(Diagram d, String label, Set<String> disjoints,
+			Set<String> supers) {
+		// log.info("Adding :::::::  "+label+"  :::::::");
+		if (d.getCurves().contains(label)) {
+			// log.info("Nothing to do");
 			return d;
 		}
-		log.info(label + " is disjoint from " + stringSet(disjoints) + " and has supers " + stringSet(supers));
+		// log.info(label + " is disjoint from " + stringSet(disjoints) +
+		// " and has supers " + stringSet(supers));
 		Set<Zone> zs = d.getZones();
 		Set<Zone> z_shaded = new HashSet<Zone>();
-		
+
 		Set<Zone> z_in = new HashSet<Zone>();
 		Set<Zone> z_out = new HashSet<Zone>();
 		Set<Zone> z_split = new HashSet<Zone>();
 		Set<Zone> z_all = new HashSet<Zone>();
 
 		boolean is_out, is_in;
-		for(Zone z: zs) {
-			is_out = !isDisjoint(z.getIn(), disjoints) || !isDisjoint(z.getOut(), supers);
+		for (Zone z : zs) {
+			is_out = !isDisjoint(z.getIn(), disjoints)
+					|| !isDisjoint(z.getOut(), supers);
 			is_in = !isDisjoint(z.getIn(), supers);
-			if(is_in) {
-				log.info(z + " is IN");
+			if (is_in) {
+				// log.info(z + " is IN");
 				z_in.add(z);
 			}
-			if(is_out) {
-				log.info(z + " is OUT");
+			if (is_out) {
+				// log.info(z + " is OUT");
 				z_out.add(z);
 			}
-			if(!(is_in || is_out)) {
-				log.info(z + " is SPLIT");
+			if (!(is_in || is_out)) {
+				// log.info(z + " is SPLIT");
 				z_split.add(z);
 			}
 		}
 		Zone z1, z2;
 		Set<Zone> z_tmp = new HashSet<Zone>();
-		
-		for(Zone z: z_in) {
+
+		for (Zone z : z_in) {
 			z1 = new Zone(z);
 			z2 = new Zone(z);
 			z1.getIn().add(label);
 			z2.getOut().add(label);
 			z_tmp.add(z1);
 			z_tmp.add(z2);
-			if(d.getShadedZones().contains(z)) z_shaded.add(z2);
+			if (d.getShadedZones().contains(z))
+				z_shaded.add(z2);
 		}
 		z_in = z_tmp;
 		z_tmp = new HashSet<Zone>();
-		
-		for(Zone z: z_out) {
+
+		for (Zone z : z_out) {
 			z1 = new Zone(z);
 			z1.getOut().add(label);
-			if(d.getShadedZones().contains(z)) z_shaded.add(z1);
+			z_tmp.add(z1);
+			if (d.getShadedZones().contains(z))
+				z_shaded.add(z1);
 		}
-		
-		for(Zone z: z_split) {
+		z_out = z_tmp;
+
+		for (Zone z : z_split) {
 			z1 = new Zone(z);
 			z2 = new Zone(z);
 			z1.getIn().add(label);
@@ -195,57 +205,59 @@ public class AbstractDiagramBuilder2 {
 			z_tmp.add(z2);
 		}
 		z_split = z_tmp;
-		///////////////////
-		log.info("IN");
-		for(Zone z: z_in) log.info(z);
-		log.info("OUT");
-		for(Zone z: z_out) log.info(z);
-		log.info("SPLIT");
-		for(Zone z: z_split) log.info(z);
-		///////////////////
+		// /////////////////
+		// log.info("IN");
+		// for(Zone z: z_in) log.info(z);
+		// log.info("OUT");
+		// for(Zone z: z_out) log.info(z);
+		// log.info("SPLIT");
+		// for(Zone z: z_split) log.info(z);
+		// /////////////////
 		z_all = z_in;
 		z_all.addAll(z_out);
 		z_all.addAll(z_split);
-		///////////////////
-		log.info("EVERYTHING");
-		for(Zone z: z_all) log.info(z);
-		///////////////////
+		// /////////////////
+		// log.info("EVERYTHING");
+		// for(Zone z: z_all) log.info(z);
+		// /////////////////
 		// Shading and inconsistency
-		for(Zone z: z_all) {
-			for(String l: z.getIn()) {
-				if(inconsistentClasses.contains(l)) {
+		for (Zone z : z_all) {
+			for (String l : z.getIn()) {
+				if (inconsistentClasses.contains(l)) {
 					z_shaded.add(z);
 					break;
 				}
 				boolean shadeMe = false;
-				if(equivsInfo.containsKey(l)) {
-					for(OWLClass e: equivsInfo.get(l)) {
-	    				String eNm = classMap.get(e);
-	    				if(!z.getIn().contains(eNm)) {
-	    					shadeMe = true;
-	    					break;
-	    				}
-	    			}
-					if(shadeMe) {
+				if (equivsInfo.containsKey(l)) {
+					for (OWLClass e : equivsInfo.get(l)) {
+						String eNm = classMap.get(e);
+						if (!z.getIn().contains(eNm)) {
+							shadeMe = true;
+							break;
+						}
+					}
+					if (shadeMe) {
 						z_shaded.add(z);
 						break;
 					}
 				}
-				if(unionsInfo.containsKey(l)) {//if l is a union of classes, S, regions containing l but not S should be shaded
-	    			Set<OWLClass> unions = unionsInfo.get(l);
-	    			shadeMe = true;
-	    			for(OWLClass u: unions) {
-	    				String uNm = classMap.get(u);
-	    				if(z.getIn().contains(uNm)) {
-	    					shadeMe = false;
-	    					break;
-	    				}
-	    			}
-	    			if(shadeMe) {
-	    				z_shaded.add(z);
-	    				break;
-	    			}
-	    		}
+				if (unionsInfo.containsKey(l)) {// if l is a union of classes,
+												// S, regions containing l but
+												// not S should be shaded
+					Set<OWLClass> unions = unionsInfo.get(l);
+					shadeMe = true;
+					for (OWLClass u : unions) {
+						String uNm = classMap.get(u);
+						if (z.getIn().contains(uNm)) {
+							shadeMe = false;
+							break;
+						}
+					}
+					if (shadeMe) {
+						z_shaded.add(z);
+						break;
+					}
+				}
 			}
 		}
 		return new Diagram(z_all, z_shaded);
@@ -291,7 +303,7 @@ public class AbstractDiagramBuilder2 {
 			// collect the equivalent classes info
 			Node<OWLClass> equivs = theReasoner.getEquivalentClasses(cls);
 			if (!equivs.isSingleton())
-				equivsInfo.put(nm, equivs.getEntities());
+				equivsInfo.put(nm, new HashSet<OWLClass>(equivs.getEntities()));
 			// collect the union classes info
 			Set<OWLEquivalentClassesAxiom> eq;
 			for (OWLOntology ont : activeOntologies) {
@@ -328,40 +340,66 @@ public class AbstractDiagramBuilder2 {
 		return ren.render(cls).replaceAll("'", "").replaceAll(" ", "");
 	}
 
-	public Set<Zone> getZones() {
-		return zones;
-	}
-
-	public Set<Zone> getShadedZones() {
-		return shadedZones;
-	}
-	
 	public <T> Set<T> intersect(Set<T> set1, Set<T> set2) {
 		Set<T> intersection = new HashSet<T>(set1);
 		intersection.retainAll(set2);
-        return intersection;
-    }
-	
+		return intersection;
+	}
+
 	public <T> boolean isDisjoint(Set<T> set1, Set<T> set2) {
-        return intersect(set1, set2).isEmpty();
-    }
-	
+		return intersect(set1, set2).isEmpty();
+	}
+
 	private Set<String> getDisjoints(String label) {
-		return (disjointsInfo.containsKey(label)) ? disjointsInfo.get(label) : new HashSet<String>();
+		return (disjointsInfo.containsKey(label)) ? disjointsInfo.get(label)
+				: new HashSet<String>();
 	}
-	
+
 	private Set<String> getSupers(String label) {
-		return (supersInfo.containsKey(label)) ? supersInfo.get(label) : new HashSet<String>();
+		return (supersInfo.containsKey(label)) ? supersInfo.get(label)
+				: new HashSet<String>();
 	}
-	
-	private <T> String stringSet(Set<T> s) {
+
+	private <T> String stringSet(List<T> s) {
 		StringBuilder sb = new StringBuilder("{");
-		for(T e: s) {
+		for (T e : s) {
 			sb.append(e.toString());
 			sb.append(", ");
 		}
 		sb.append("}");
 		return sb.toString();
+	}
+
+	private Set<AbstractCurve> stringsToCurves(Set<String> in) {
+		Set<AbstractCurve> res = new HashSet<AbstractCurve>();
+		for (String s : in) {
+			AbstractCurve c = new AbstractCurve(CurveLabel.get(s));
+			res.add(c);
+			// log.info("str2Curve "+c);
+		}
+		return res;
+	}
+
+	public String[] getCurves() {
+		return curves.toArray(new String[curves.size()]);
+	}
+
+	public icircles.input.Zone[] getZones() {
+		List<icircles.input.Zone> res = new ArrayList<icircles.input.Zone>();
+		for (Zone z : zones) {
+			res.add(new icircles.input.Zone(z.getIn().toArray(
+					new String[z.getIn().size()])));
+		}
+		return res.toArray(new icircles.input.Zone[res.size()]);
+	}
+
+	public icircles.input.Zone[] getShadedZones() {
+		List<icircles.input.Zone> res = new ArrayList<icircles.input.Zone>();
+		for (Zone z : shadedZones) {
+			res.add(new icircles.input.Zone(z.getIn().toArray(
+					new String[z.getIn().size()])));
+		}
+		return res.toArray(new icircles.input.Zone[res.size()]);
 	}
 
 }

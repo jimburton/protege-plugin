@@ -1,11 +1,14 @@
 package uk.ac.brighton.vmg.conceptd.syntax;
 
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 
 public class Zone {
-	private HashSet<String> in, out;
+	private Set<String> in, out;
 
-	public Zone(HashSet<String> in, HashSet<String> out) {
+	public Zone(Set<String> in, Set<String> out) {
 		this.setIn(in);
 		this.setOut(out);
 	}
@@ -15,11 +18,11 @@ public class Zone {
 		this.setOut(new HashSet<String>(z.getOut()));
 	}
 
-	public HashSet<String> getIn() {
+	public Set<String> getIn() {
 		return in;
 	}
 
-	public HashSet<String> getOut() {
+	public Set<String> getOut() {
 		return out;
 	}
 	
@@ -27,11 +30,11 @@ public class Zone {
 		return "("+getIn().toString()+", "+getOut().toString()+")";
 	}
 
-	private void setIn(HashSet<String> in) {
+	private void setIn(Set<String> in) {
 		this.in = in;
 	}
 
-	private void setOut(HashSet<String> out) {
+	private void setOut(Set<String> out) {
 		this.out = out;
 	}
 }

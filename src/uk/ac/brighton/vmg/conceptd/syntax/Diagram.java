@@ -6,14 +6,14 @@ import java.util.Set;
 public class Diagram {
 	private Set<Zone> zones;
 	private Set<Zone> shadedZones;
-	private Set<String> labels;
+	private Set<String> curves;
 
 	public Diagram(Set<Zone> zs, Set<Zone> sz) {
 		zones = zs;
 		shadedZones = sz;
 		for(Zone z: zones) {
-			labels = new HashSet<String>(z.getIn());
-			labels.addAll(z.getOut());
+			curves = new HashSet<String>(z.getIn());
+			curves.addAll(z.getOut());
 			break;
 		}
 	}
@@ -22,8 +22,8 @@ public class Diagram {
 		return zones;
 	}
 	
-	public Set<String> getLabels() {
-		return labels;
+	public Set<String> getCurves() {
+		return curves;
 	}
 	
 	public String toString() {
@@ -35,7 +35,7 @@ public class Diagram {
 		return sb.toString();
 	}
 
-	Set<Zone> getShadedZones() {
+	public Set<Zone> getShadedZones() {
 		return shadedZones;
 	}
 
