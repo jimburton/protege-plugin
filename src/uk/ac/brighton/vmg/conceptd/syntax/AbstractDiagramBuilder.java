@@ -37,9 +37,11 @@ public class AbstractDiagramBuilder {
 															// its real name and
 															// OWL class
 	private Map<String, Set<String>> disjointsInfo;
+	private Map<String, Set<String>> supersInfo;
+	private Map<String, Set<String>> childrenInfo;
 	private Map<String, Set<OWLClass>> equivsInfo;
 	private Map<String, Set<OWLClass>> unionsInfo;
-	private Map<String, Set<String>> supersInfo;
+
 	private int hierarchyDepth;
 	private final String EMPTY_LABEL = "Nothing";
 	public static final int MAX_CURVES = 10;
@@ -95,6 +97,7 @@ public class AbstractDiagramBuilder {
 			equivsInfo = new HashMap<String, Set<OWLClass>>();
 			unionsInfo = new HashMap<String, Set<OWLClass>>();
 			supersInfo = new HashMap<String, Set<String>>();
+			childrenInfo = new HashMap<String, Set<String>>();
 		}
 	}
 
@@ -115,10 +118,11 @@ public class AbstractDiagramBuilder {
 			Diagram d = new Diagram(emptyZoneSet, new HashSet<Zone>(
 					emptyZoneSet));
 			Set<String> emptyCurveSet = new HashSet<String>();
-			d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet);
+			d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet, curves);
 			// log.info("After first curve: "+d);
 			for (String l : classMap.keySet()) {
-				d = addCurve(d, l, getDisjoints(l), getSupers(l));
+				d = addCurve(d, l, getInfo(disjointsInfo, l),
+						getInfo(supersInfo, l), getInfo(childrenInfo, l));
 				// log.info(d);
 			}
 			d = setShading(d);
@@ -131,11 +135,11 @@ public class AbstractDiagramBuilder {
 	}
 
 	/**
-	 * Is this optimisation worthwhile? There are sometimes hundreds of classes
-	 * in the disjoint and super classes, but only a few in the classMap. We
-	 * often have to check the contents of these maps, so it's probably worth
-	 * it. There seem to be far fewer in the equivs and unionInfo maps for most
-	 * ontologies, so don't bother.
+	 * There are sometimes hundreds of classes in the disjoint and super
+	 * classes, but only a few in the classMap (those we actually want to draw).
+	 * We often have to check the contents of these maps, so it's worth it to
+	 * restrict them. There seem to be far fewer in the equivs and unionInfo
+	 * maps for most ontologies, so don't bother.
 	 */
 	private void restrictClasses() {
 		Set<String> classes = classMap.keySet();
@@ -153,14 +157,14 @@ public class AbstractDiagramBuilder {
 	}
 
 	private Diagram addCurve(Diagram d, String label, Set<String> disjoints,
-			Set<String> supers) {
+			Set<String> supers, Set<String> children) {
 		// log.info("Adding :::::::  "+label+"  :::::::");
 		if (d.getCurves().contains(label)) {
 			// log.info("Nothing to do");
 			return d;
 		}
 		log.info(label + " is disjoint from " + disjoints + " and has supers "
-				+ supers);
+				+ supers + " and children " + children);
 		Set<Zone> zs = d.getZones();
 		Set<Zone> z_all = new HashSet<Zone>();
 
@@ -169,21 +173,59 @@ public class AbstractDiagramBuilder {
 
 		for (Zone z : zs) {
 			log.info("Adding " + label + " to " + z);
-			is_in = isDisjoint(z.getIn(), disjoints)
-					&& !isDisjoint(z.getIn(), supers);
+			/*is_split = isDisjoint(z.getOut(), supers)
+					&& isDisjoint(z.getIn(), disjoints);
+			is_out = !isDisjoint(z.getIn(), disjoints);
+			is_in = false;
+			if (!is_split && !is_out) {
+				Set<String> supers_tmp;
+				for (String s : z.getIn()) {
+					supers_tmp = supersInfo.get(s);
+					if (supers_tmp.contains(label)) {
+						is_in = true;
+						break;
+					}
+				}
+			}
+			if(is_split) {
+				log.info(label+" is SPLIT");
+				z1 = new Zone(z);
+				z1.getIn().add(label);
+				z_all.add(z1);
+				z2 = new Zone(z);
+				z2.getOut().add(label);
+				z_all.add(z2);
+			} else if (is_out) {
+				log.info(label+" is OUT");
+				z1 = new Zone(z);
+				z1.getOut().add(label);
+				z_all.add(z1);
+			} else if (is_in) {
+				log.info(label+" is IN");
+				z1 = new Zone(z);
+				z1.getIn().add(label);
+				z_all.add(z1);
+			} else {
+				log.warn(label+" is not IN, OUT or SPLIT");
+			}*/
+			
+			is_in = !isDisjoint(z.getIn(), children) || (isDisjoint(z.getIn(), disjoints)
+					&& !isDisjoint(z.getIn(), supers));
 			is_out = !isDisjoint(z.getIn(), disjoints)
 					|| !isDisjoint(z.getOut(), supers);
-			
-			//is_in = !isDisjoint(z.getIn(), supers);
-			//is_out = !isDisjoint(z.getIn(), disjoints);
+
 			if (is_in) {
 				log.info(z + " is IN");
-				z1 = new Zone(z);
-				z2 = new Zone(z);
-				z1.getIn().add(label);
-				z2.getOut().add(label);
-				z_all.add(z1);
-				z_all.add(z2);
+				if(isDisjoint(z.getOut(),  supers)) { //TODO incorporate these conditions in the boolean
+					z1 = new Zone(z);
+					z1.getIn().add(label);
+					z_all.add(z1);
+				}
+				if(z.getIn().isEmpty() || isDisjoint(z.getIn(), children)) {//TODO incorporate these conditions in the boolean
+					z2 = new Zone(z);
+					z2.getOut().add(label);
+					z_all.add(z2);
+				}
 			}
 			if (is_out) {
 				log.info(z + " is OUT");
@@ -200,8 +242,7 @@ public class AbstractDiagramBuilder {
 				z_all.add(z1);
 				z_all.add(z2);
 			}
-			
-			log.info("z_all: "+z_all);
+			log.info("z_all: " + z_all);
 		}
 		return new Diagram(z_all, null);
 	}
@@ -264,9 +305,8 @@ public class AbstractDiagramBuilder {
 		if (depth > 0) {
 			String nm = render(cls);
 			supersInfo.put(nm, supers);
-			String lbl = (theProvider.getChildren(cls).size() > 0 && depth == 1) ? nm
-					+ "+"
-					: nm;
+			Set<OWLClass> children = theProvider.getDescendants(cls);
+			String lbl = (children.size() > 0 && depth == 1) ? nm + "+" : nm;
 			Pair<String, OWLClass> nameInfo = new Pair<String, OWLClass>(lbl,
 					cls);
 			classMap.put(nm, nameInfo);
@@ -278,15 +318,23 @@ public class AbstractDiagramBuilder {
 					setClasses(sub, newDepth, supers2);
 				}
 			}
+			// collect the children info
+			Set<String> childrenStr = new HashSet<String>();
+			Iterator<OWLClass> it = children.iterator();
+			OWLClass c;
+			while (it.hasNext()) {
+				childrenStr.add(render(it.next()));
+			}
+			childrenInfo.put(nm, childrenStr);
+
 			// collect the disjointness info
 			NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(cls);// or use
 																		// TR's
 																		// method
 			Set<String> disjoints = new HashSet<String>();
-			Iterator<Node<OWLClass>> it = ds.iterator();
-			OWLClass c;
-			while (it.hasNext()) {
-				c = it.next().getRepresentativeElement();
+			Iterator<Node<OWLClass>> it2 = ds.iterator();
+			while (it2.hasNext()) {
+				c = it2.next().getRepresentativeElement();
 				disjoints.add(render(c));
 			}
 			if (disjoints.size() > 0)
@@ -340,18 +388,13 @@ public class AbstractDiagramBuilder {
 	private <T> boolean isDisjoint(Set<T> set1, Set<T> set2) {
 		return intersect(set1, set2).isEmpty();
 	}
-	
+
 	private <T> boolean isSuperSet(Set<T> supr, Set<T> sub) {
 		return supr.containsAll(sub);
 	}
 
-	private Set<String> getDisjoints(String label) {
-		return (disjointsInfo.containsKey(label)) ? disjointsInfo.get(label)
-				: new HashSet<String>();
-	}
-
-	private Set<String> getSupers(String label) {
-		return (supersInfo.containsKey(label)) ? supersInfo.get(label)
+	private Set<String> getInfo(Map<String, Set<String>> info, String label) {
+		return (info.containsKey(label)) ? info.get(label)
 				: new HashSet<String>();
 	}
 
@@ -398,6 +441,7 @@ public class AbstractDiagramBuilder {
 			}
 			res.add(new icircles.input.Zone(namesForDisplay));
 		}
+		res.add(new icircles.input.Zone(new String[] {}));
 		return res.toArray(new icircles.input.Zone[res.size()]);
 	}
 
