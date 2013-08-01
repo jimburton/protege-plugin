@@ -31,6 +31,9 @@ import uk.ac.brighton.vmg.conceptd.syntax.AbstractDiagramBuilder;
 
 public class ViewComponent extends AbstractOWLClassViewComponent {
 	private static final long serialVersionUID = -4515710047558710080L;
+	public static final int CVIZ_VERSION_MAJOR = 0;
+	public static final int CVIZ_VERSION_MINOR = 1;
+	public static final String CVIZ_VERSION_STATUS = "alpha";
 	private JPanel cdPanel;
 	private JComboBox<String> depthPicker;
 	private OWLClass theSelectedClass;
