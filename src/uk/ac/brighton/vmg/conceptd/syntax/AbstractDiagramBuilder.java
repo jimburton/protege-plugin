@@ -1,4 +1,5 @@
 package uk.ac.brighton.vmg.conceptd.syntax;
+
 /**
  * Responsible for building up the abstract description of Euler/concept diagrams by
  * interacting with the Protege API. It does this by using a OWLObjectHierarchyProvider,
@@ -7,6 +8,7 @@ package uk.ac.brighton.vmg.conceptd.syntax;
  * Copyright (c) 2013 The ConceptViz authors (see the file AUTHORS).
  * See the file LICENSE for copying permission.
  */
+import icircles.input.Spider;
 import icircles.util.CannotDrawException;
 
 import java.util.ArrayList;
@@ -24,7 +26,9 @@ import org.protege.editor.owl.ui.renderer.OWLModelManagerEntityRenderer;
 import org.semanticweb.owlapi.model.ClassExpressionType;
 import org.semanticweb.owlapi.model.OWLClass;
 import org.semanticweb.owlapi.model.OWLClassExpression;
+import org.semanticweb.owlapi.model.OWLEntity;
 import org.semanticweb.owlapi.model.OWLEquivalentClassesAxiom;
+import org.semanticweb.owlapi.model.OWLIndividual;
 import org.semanticweb.owlapi.model.OWLOntology;
 import org.semanticweb.owlapi.reasoner.Node;
 import org.semanticweb.owlapi.reasoner.NodeSet;
@@ -32,10 +36,10 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
 public class AbstractDiagramBuilder {
 
-	
 	private Set<Zone> zones;
 	private Set<Zone> shadedZones;
 	private Set<String> curves;
+	private Map<Zone, Set<OWLIndividual>> individuals;
 
 	private Set<String> inconsistentClasses;
 	private Map<String, Pair<String, OWLClass>> classMap;// map from each class
@@ -51,6 +55,7 @@ public class AbstractDiagramBuilder {
 	private int hierarchyDepth;
 	private final String EMPTY_LABEL = "Nothing";
 	public static final int MAX_CURVES = 10;
+	private boolean showSpiders;
 
 	private OWLClass topClass;
 	private String topClassName;
@@ -77,17 +82,24 @@ public class AbstractDiagramBuilder {
 			.getLogger(AbstractDiagramBuilder.class);
 
 	/**
-	 * The sole constructor for AbstractDiagramBuilder. Instantiated by the Protege plugin system (OSGI).
-	 * @param selectedClass the class which was selected from a class hierarchy pane.
-	 * @param mgr           provides access to the current model.
-	 * @param d             the depth within the hierarchy that we should descend from selectedClass.
+	 * The sole constructor for AbstractDiagramBuilder. Instantiated by the
+	 * Protege plugin system (OSGI).
+	 * 
+	 * @param selectedClass
+	 *            the class which was selected from a class hierarchy pane.
+	 * @param mgr
+	 *            provides access to the current model.
+	 * @param d
+	 *            the depth within the hierarchy that we should descend from
+	 *            selectedClass.
 	 */
 	public AbstractDiagramBuilder(OWLClass selectedClass, OWLModelManager mgr,
-			int d) {
+			int d, boolean showSpiders) {
 		log.info("new builder for " + selectedClass);
 		if (selectedClass != null) {
 			this.mgr = mgr;
 			hierarchyDepth = d;
+			this.showSpiders = showSpiders;
 			topClass = selectedClass;
 
 			assertedHierarchyProvider = mgr.getOWLHierarchyManager()
@@ -97,13 +109,20 @@ public class AbstractDiagramBuilder {
 			theProvider = (theModel == MODEL.INFERRED ? inferredHierarchyProvider
 					: assertedHierarchyProvider);
 			theReasoner = mgr.getOWLReasonerManager().getCurrentReasoner();
-			log.info("the reasoner: "+theReasoner.getReasonerName());//evals to "Protégé Null Reasoner" if none is active
+			log.info("the reasoner: " + theReasoner.getReasonerName());// evals
+																		// to
+																		// "Protégé Null Reasoner"
+																		// if
+																		// none
+																		// is
+																		// active
 			ren = mgr.getOWLEntityRenderer();
 			topClassName = render(topClass);
 			activeOntologies = mgr.getActiveOntologies();
 
 			shadedZones = new HashSet<Zone>();
 			zones = new HashSet<Zone>();
+			individuals = new HashMap<Zone, Set<OWLIndividual>>();
 			inconsistentClasses = new HashSet<String>();
 			classMap = new HashMap<String, Pair<String, OWLClass>>();
 			disjointsInfo = new HashMap<String, Set<String>>();
@@ -115,8 +134,9 @@ public class AbstractDiagramBuilder {
 	}
 
 	/**
-	 * Create the diagram. No return value, the caller needs to use {@link getCurves}, 
-	 * {@link getZones} and {@link getShadedZones} to retrieve the results. 
+	 * Create the diagram. No return value, the caller needs to use
+	 * {@link getCurves}, {@link getZones} and {@link getShadedZones} to
+	 * retrieve the results.
 	 */
 	public void build() throws CannotDrawException {
 		if (topClass != null) {
@@ -127,22 +147,23 @@ public class AbstractDiagramBuilder {
 			restrictClasses();
 			Zone empty = new Zone(new HashSet<String>(), new HashSet<String>());
 			Set<Zone> emptyZoneSet = new HashSet<Zone>();
+			Set<Spider> emptySpiderSet = new HashSet<Spider>();
 			emptyZoneSet.add(empty);
 			Diagram d = new Diagram(emptyZoneSet, new HashSet<Zone>(
-					emptyZoneSet));
+					emptyZoneSet), emptySpiderSet);
 			Set<String> emptyCurveSet = new HashSet<String>();
 			d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet, curves);
 			for (String l : classMap.keySet()) {
 				d = addCurve(d, l, getInfo(disjointsInfo, l),
 						getInfo(supersInfo, l), getInfo(childrenInfo, l));
 			}
-			d = setShading(d);
+			d = setSpidersAndShading(d);
 			curves = d.getCurves();
 			zones = d.getZones();
 			shadedZones = d.getShadedZones();
 		}
 	}
-	
+
 	/**
 	 * Collect the list of curve labels in the diagram, along with info on
 	 * disjoint and union classes, and the parent classes (supers) and children,
@@ -228,10 +249,10 @@ public class AbstractDiagramBuilder {
 	}
 
 	/**
-	 * Restrict the contents of the lookup maps to actual curves that will
-	 * be drawn in the current diagram. There may be sometimes hundreds of classes 
-	 * in the disjoint and super classes, but only a few in the classMap.
-	 * We often have to check the contents of these maps, so it's worth it to
+	 * Restrict the contents of the lookup maps to actual curves that will be
+	 * drawn in the current diagram. There may be sometimes hundreds of classes
+	 * in the disjoint and super classes, but only a few in the classMap. We
+	 * often have to check the contents of these maps, so it's worth it to
 	 * restrict them. There seem to be far fewer in the equivs and unionInfo
 	 * maps for most ontologies, so don't bother.
 	 */
@@ -251,8 +272,8 @@ public class AbstractDiagramBuilder {
 	}
 
 	/**
-	 * Called recursively to add curves to the diagram. TODO this is a major target for
-	 * optimisation! (Nice way of saying that it stinks.) 
+	 * Called recursively to add curves to the diagram. TODO this is a major
+	 * target for optimisation! (Nice way of saying that it stinks.)
 	 * 
 	 * @param d
 	 * @param label
@@ -276,19 +297,28 @@ public class AbstractDiagramBuilder {
 
 		for (Zone z : zs) {
 			log.info("Adding " + label + " to " + z);
-			is_in = !isDisjoint(z.getIn(), children) || (isDisjoint(z.getIn(), disjoints)
-					&& !isDisjoint(z.getIn(), supers));
+			is_in = !isDisjoint(z.getIn(), children)
+					|| (isDisjoint(z.getIn(), disjoints) && !isDisjoint(
+							z.getIn(), supers));
 			is_out = !isDisjoint(z.getIn(), disjoints)
 					|| !isDisjoint(z.getOut(), supers);
 
 			if (is_in) {
 				log.info(z + " is IN");
-				if(isDisjoint(z.getOut(),  supers)) { //TODO incorporate these conditions in the boolean
+				if (isDisjoint(z.getOut(), supers)) { // TODO incorporate these
+														// conditions in the
+														// boolean
 					z1 = new Zone(z);
 					z1.getIn().add(label);
 					z_all.add(z1);
 				}
-				if(z.getIn().isEmpty() || isDisjoint(z.getIn(), children)) {//TODO incorporate these conditions in the boolean
+				if (z.getIn().isEmpty() || isDisjoint(z.getIn(), children)) {// TODO
+																				// incorporate
+																				// these
+																				// conditions
+																				// in
+																				// the
+																				// boolean
 					z2 = new Zone(z);
 					z2.getOut().add(label);
 					z_all.add(z2);
@@ -311,28 +341,45 @@ public class AbstractDiagramBuilder {
 			}
 			log.info("z_all: " + z_all);
 		}
-		return new Diagram(z_all, null);
+		return new Diagram(z_all, null, null);
 	}
 
 	/**
-	 * Add shaded zones to the diagram based on info from the model -- three types of zone
-	 * are target for shading:
+	 * Add shaded zones to the diagram based on info from the model -- three
+	 * types of zone are target for shading:
 	 * <ul>
-	 * <li>a zone that contains  an inconsistent class,</li>
-	 * <li>a zone that contains some but not all of a set of classes that are equivalent to 
-	 * each other,</li>
-	 * <li>a zone that contains a class which is the disjoint union of several classes, where
-	 * the zone does not contain any of those other classes.</li>
+	 * <li>a zone that contains an inconsistent class,</li>
+	 * <li>a zone that contains some but not all of a set of classes that are
+	 * equivalent to each other,</li>
+	 * <li>a zone that contains a class which is the disjoint union of several
+	 * classes, where the zone does not contain any of those other classes.</li>
 	 * </ul>
-	 *
-	 * @param d the diagram
+	 * 
+	 * @param d
+	 *            the diagram
 	 * @return
 	 */
-	private Diagram setShading(Diagram d) {
+	private Diagram setSpidersAndShading(Diagram d) {
 		Set<Zone> z_all = d.getZones();
 		Set<Zone> z_shaded = new HashSet<Zone>();
+		Set<OWLIndividual> spiders;
 		for (Zone z : z_all) {
+			spiders = new HashSet<OWLIndividual>();
 			for (String l : z.getIn()) {
+				// spiders
+				if (showSpiders) {
+					OWLClass c = classMap.get(l).snd;
+					if (spiders.isEmpty()) {
+						for (OWLOntology o : activeOntologies) {
+							spiders.addAll(c.getIndividuals(o));
+						}
+					} else {
+						for (OWLOntology o : activeOntologies) {
+							spiders.retainAll(c.getIndividuals(o));
+						}
+					}
+				}
+				// shading
 				if (inconsistentClasses.contains(l)) {
 					z_shaded.add(z);
 					break;
@@ -369,16 +416,18 @@ public class AbstractDiagramBuilder {
 					}
 				}
 			}
+			if (showSpiders) individuals.put(z, spiders);
 		}
-		return new Diagram(z_all, z_shaded);
+		return new Diagram(z_all, z_shaded, null);
 	}
 
 	/**
-	 * Get a string representation of cls according to locale and other 
-	 * settings, then strip out characters that aren't accepted in labels
-	 * by iCircles.
+	 * Get a string representation of cls according to locale and other
+	 * settings, then strip out characters that aren't accepted in labels by
+	 * iCircles.
 	 * 
-	 * @param cls the class to render
+	 * @param cls
+	 *            the class to render
 	 * @return
 	 */
 	private String render(OWLClass cls) {
@@ -403,11 +452,13 @@ public class AbstractDiagramBuilder {
 	}
 
 	/**
-	 * Look up an entry in one of the maps that contain info on children, parent, 
-	 * disjoint classes, etc.
+	 * Look up an entry in one of the maps that contain info on children,
+	 * parent, disjoint classes, etc.
 	 * 
-	 * @param info the map
-	 * @param label the key to look up
+	 * @param info
+	 *            the map
+	 * @param label
+	 *            the key to look up
 	 * @return
 	 */
 	private Set<String> getInfo(Map<String, Set<String>> info, String label) {
@@ -416,8 +467,8 @@ public class AbstractDiagramBuilder {
 	}
 
 	/**
-	 * Convert the internal Set<String> of curves into an array of Strings so that 
-	 * it can be passed to iCircles.
+	 * Convert the internal Set<String> of curves into an array of Strings so
+	 * that it can be passed to iCircles.
 	 * 
 	 * @return the array
 	 */
@@ -438,7 +489,7 @@ public class AbstractDiagramBuilder {
 	public icircles.input.Zone[] getZones() {
 		return zonesToICircleZones(zones);
 	}
-	
+
 	/**
 	 * Get the shaded zones in the built diagram as an array of iCircle zones.
 	 * 
@@ -449,11 +500,11 @@ public class AbstractDiagramBuilder {
 	}
 
 	/**
-	 * Convert the internal Set<Zone>s into arrays of iCircle Zones
-	 * so that it can be passed to iCircles. Not using the iCircles Zone class
-	 * internally because at many points in the code (e.g. in {@link addCurve})
-	 * we need to know what curves are outside the zone, and using the iCircle Zone
-	 * would mean we needed to subtract from the set of all curves.
+	 * Convert the internal Set<Zone>s into arrays of iCircle Zones so that it
+	 * can be passed to iCircles. Not using the iCircles Zone class internally
+	 * because at many points in the code (e.g. in {@link addCurve}) we need to
+	 * know what curves are outside the zone, and using the iCircle Zone would
+	 * mean we needed to subtract from the set of all curves.
 	 * 
 	 * @return the array
 	 */
@@ -472,6 +523,36 @@ public class AbstractDiagramBuilder {
 			res.add(new icircles.input.Zone(namesForDisplay));
 		}
 		return res.toArray(new icircles.input.Zone[res.size()]);
+	}
+
+	/**
+	 * Provides the set of individuals in this diagram as an array of iCircles
+	 * spiders.
+	 * 
+	 * @return the array of spiders
+	 */
+	public Spider[] getSpiders() {
+		Set<Zone> habitatSet;
+		icircles.input.Zone[] habitat;
+		String name;
+		Set<OWLIndividual> inds;
+		List<Spider> spiders = new ArrayList<Spider>();
+		for (Zone z : individuals.keySet()) {
+			habitatSet = new HashSet<Zone>();
+			habitatSet.add(z);
+			habitat = zonesToICircleZones(habitatSet);
+			inds = individuals.get(z);
+			String nm;
+			for (OWLIndividual i : inds) {
+				nm = "";
+				if (i.isNamed()) {
+					nm = ren.render((OWLEntity) i);
+				}
+				//log.info("A spider called " + nm);
+				spiders.add(new Spider(nm, habitat));
+			}
+		}
+		return spiders.toArray(new Spider[spiders.size()]);
 	}
 
 }

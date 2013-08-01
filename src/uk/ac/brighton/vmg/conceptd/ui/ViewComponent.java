@@ -17,7 +17,10 @@ import java.awt.Color;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.event.ItemEvent;
+import java.awt.event.ItemListener;
 
+import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
@@ -36,6 +39,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	public static final String CVIZ_VERSION_STATUS = "alpha";
 	private JPanel cdPanel;
 	private JComboBox<String> depthPicker;
+	private boolean showInd = false;
 	private OWLClass theSelectedClass;
 
 	private int DIAG_SIZE;
@@ -77,6 +81,18 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		});
 		topPanel.add(depthLabel);
 		topPanel.add(depthPicker);
+		JCheckBox showIndCB = new JCheckBox("Show individuals:");
+		showIndCB.setSelected(showInd);
+		showIndCB.addItemListener(new ItemListener() {
+			public void itemStateChanged(ItemEvent e) {
+				showInd = (e.getStateChange() == ItemEvent.SELECTED);
+				log.info("drawing with spiders: "+showInd);
+				if (theSelectedClass != null)
+					updateView(theSelectedClass);
+			}
+		});
+		topPanel.add(showIndCB);
+		
 		add(topPanel, BorderLayout.NORTH);
 		cdPanel = new JPanel();
 		cdPanel.setBackground(Color.WHITE);
@@ -97,7 +113,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		DIAG_SIZE = getHeight() - 50;
 		if (selectedClass != null) {
 			AbstractDiagramBuilder builder2 = new AbstractDiagramBuilder(
-					selectedClass, getOWLModelManager(), hierarchyDepth);
+					selectedClass, getOWLModelManager(), hierarchyDepth, showInd);
 			try {
 				builder2.build();
 			} catch (CannotDrawException e) {
@@ -108,10 +124,12 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 			String[] cs = builder2.getCurves();
 			icircles.input.Zone[] zs = builder2.getZones();
 			icircles.input.Zone[] szs = builder2.getShadedZones();
+			Spider[] sps = (showInd) ? builder2.getSpiders() : new Spider[]{};
 			debug("Curves", cs);
 			debug("Zones", zs);
 			debug("Shaded zones", szs);
-			drawCD(cs, zs, szs);
+			debug("Individuals", sps);
+			drawCD(cs, zs, szs, sps);
 		}
 		return selectedClass;
 	}
@@ -125,15 +143,14 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	 * @param sz the abstract shaded zones
 	 */
 	private void drawCD(String[] c, icircles.input.Zone[] z,
-			icircles.input.Zone[] sz) {
+			icircles.input.Zone[] sz, Spider[] sps) {
 		Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC, 16);
 
 		ConcreteDiagram cd = null;
 		String failureMessage = null;
 		CirclesPanel cp = null;
 		try {
-			AbstractDiagram ad = new AbstractDiagram(IC_VERSION, c, z, sz,
-					new Spider[] {});
+			AbstractDiagram ad = new AbstractDiagram(IC_VERSION, c, z, sz, sps);
 			DiagramCreator dc = new DiagramCreator(ad.toAbstractDescription());
 			cd = dc.createDiagram(DIAG_SIZE);
 			cd.setFont(font);
@@ -146,6 +163,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		}
 		cdPanel.removeAll();
 		cdPanel.add(cp);
+		cdPanel.validate();
 	}
 	
 	/**
