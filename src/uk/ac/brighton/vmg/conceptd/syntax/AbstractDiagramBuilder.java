@@ -1,7 +1,12 @@
 package uk.ac.brighton.vmg.conceptd.syntax;
-
-import icircles.abstractDescription.AbstractCurve;
-import icircles.abstractDescription.CurveLabel;
+/**
+ * Responsible for building up the abstract description of Euler/concept diagrams by
+ * interacting with the Protege API. It does this by using a OWLObjectHierarchyProvider,
+ * which represents either the <emph>asserted</emph> or <emph>inferred</emph> hierarchy.
+ * 
+ * Copyright (c) 2013 The ConceptViz authors (see the file AUTHORS).
+ * See the file LICENSE for copying permission.
+ */
 import icircles.util.CannotDrawException;
 
 import java.util.ArrayList;
@@ -27,6 +32,7 @@ import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
 public class AbstractDiagramBuilder {
 
+	
 	private Set<Zone> zones;
 	private Set<Zone> shadedZones;
 	private Set<String> curves;
@@ -70,6 +76,12 @@ public class AbstractDiagramBuilder {
 	private static final Logger log = Logger
 			.getLogger(AbstractDiagramBuilder.class);
 
+	/**
+	 * The sole constructor for AbstractDiagramBuilder. Instantiated by the Protege plugin system (OSGI).
+	 * @param selectedClass the class which was selected from a class hierarchy pane.
+	 * @param mgr           provides access to the current model.
+	 * @param d             the depth within the hierarchy that we should descend from selectedClass.
+	 */
 	public AbstractDiagramBuilder(OWLClass selectedClass, OWLModelManager mgr,
 			int d) {
 		log.info("new builder for " + selectedClass);
@@ -85,6 +97,7 @@ public class AbstractDiagramBuilder {
 			theProvider = (theModel == MODEL.INFERRED ? inferredHierarchyProvider
 					: assertedHierarchyProvider);
 			theReasoner = mgr.getOWLReasonerManager().getCurrentReasoner();
+			log.info("the reasoner: "+theReasoner.getReasonerName());//evals to "Protégé Null Reasoner" if none is active
 			ren = mgr.getOWLEntityRenderer();
 			topClassName = render(topClass);
 			activeOntologies = mgr.getActiveOntologies();
@@ -102,7 +115,8 @@ public class AbstractDiagramBuilder {
 	}
 
 	/**
-	 * Create the diagram
+	 * Create the diagram. No return value, the caller needs to use {@link getCurves}, 
+	 * {@link getZones} and {@link getShadedZones} to retrieve the results. 
 	 */
 	public void build() throws CannotDrawException {
 		if (topClass != null) {
@@ -111,7 +125,6 @@ public class AbstractDiagramBuilder {
 				throw new CannotDrawException("Too many curves");
 			}
 			restrictClasses();
-			// log.info("classes: " + classMap.values());
 			Zone empty = new Zone(new HashSet<String>(), new HashSet<String>());
 			Set<Zone> emptyZoneSet = new HashSet<Zone>();
 			emptyZoneSet.add(empty);
@@ -119,186 +132,25 @@ public class AbstractDiagramBuilder {
 					emptyZoneSet));
 			Set<String> emptyCurveSet = new HashSet<String>();
 			d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet, curves);
-			// log.info("After first curve: "+d);
 			for (String l : classMap.keySet()) {
 				d = addCurve(d, l, getInfo(disjointsInfo, l),
 						getInfo(supersInfo, l), getInfo(childrenInfo, l));
-				// log.info(d);
 			}
 			d = setShading(d);
-			// log.info(d);
 			curves = d.getCurves();
 			zones = d.getZones();
 			shadedZones = d.getShadedZones();
-
 		}
 	}
-
-	/**
-	 * There are sometimes hundreds of classes in the disjoint and super
-	 * classes, but only a few in the classMap (those we actually want to draw).
-	 * We often have to check the contents of these maps, so it's worth it to
-	 * restrict them. There seem to be far fewer in the equivs and unionInfo
-	 * maps for most ontologies, so don't bother.
-	 */
-	private void restrictClasses() {
-		Set<String> classes = classMap.keySet();
-		Set<String> intersect;
-		for (String s : disjointsInfo.keySet()) {
-			intersect = disjointsInfo.get(s);
-			intersect.retainAll(classes);
-			disjointsInfo.put(s, intersect);
-		}
-		for (String s : supersInfo.keySet()) {
-			intersect = supersInfo.get(s);
-			intersect.retainAll(classes);
-			supersInfo.put(s, intersect);
-		}
-	}
-
-	private Diagram addCurve(Diagram d, String label, Set<String> disjoints,
-			Set<String> supers, Set<String> children) {
-		// log.info("Adding :::::::  "+label+"  :::::::");
-		if (d.getCurves().contains(label)) {
-			// log.info("Nothing to do");
-			return d;
-		}
-		log.info(label + " is disjoint from " + disjoints + " and has supers "
-				+ supers + " and children " + children);
-		Set<Zone> zs = d.getZones();
-		Set<Zone> z_all = new HashSet<Zone>();
-
-		boolean is_out, is_in;
-		Zone z1, z2;
-
-		for (Zone z : zs) {
-			log.info("Adding " + label + " to " + z);
-			/*is_split = isDisjoint(z.getOut(), supers)
-					&& isDisjoint(z.getIn(), disjoints);
-			is_out = !isDisjoint(z.getIn(), disjoints);
-			is_in = false;
-			if (!is_split && !is_out) {
-				Set<String> supers_tmp;
-				for (String s : z.getIn()) {
-					supers_tmp = supersInfo.get(s);
-					if (supers_tmp.contains(label)) {
-						is_in = true;
-						break;
-					}
-				}
-			}
-			if(is_split) {
-				log.info(label+" is SPLIT");
-				z1 = new Zone(z);
-				z1.getIn().add(label);
-				z_all.add(z1);
-				z2 = new Zone(z);
-				z2.getOut().add(label);
-				z_all.add(z2);
-			} else if (is_out) {
-				log.info(label+" is OUT");
-				z1 = new Zone(z);
-				z1.getOut().add(label);
-				z_all.add(z1);
-			} else if (is_in) {
-				log.info(label+" is IN");
-				z1 = new Zone(z);
-				z1.getIn().add(label);
-				z_all.add(z1);
-			} else {
-				log.warn(label+" is not IN, OUT or SPLIT");
-			}*/
-			
-			is_in = !isDisjoint(z.getIn(), children) || (isDisjoint(z.getIn(), disjoints)
-					&& !isDisjoint(z.getIn(), supers));
-			is_out = !isDisjoint(z.getIn(), disjoints)
-					|| !isDisjoint(z.getOut(), supers);
-
-			if (is_in) {
-				log.info(z + " is IN");
-				if(isDisjoint(z.getOut(),  supers)) { //TODO incorporate these conditions in the boolean
-					z1 = new Zone(z);
-					z1.getIn().add(label);
-					z_all.add(z1);
-				}
-				if(z.getIn().isEmpty() || isDisjoint(z.getIn(), children)) {//TODO incorporate these conditions in the boolean
-					z2 = new Zone(z);
-					z2.getOut().add(label);
-					z_all.add(z2);
-				}
-			}
-			if (is_out) {
-				log.info(z + " is OUT");
-				z1 = new Zone(z);
-				z1.getOut().add(label);
-				z_all.add(z1);
-			}
-			if (!(is_in || is_out)) {
-				log.info(z + " is SPLIT");
-				z1 = new Zone(z);
-				z2 = new Zone(z);
-				z1.getIn().add(label);
-				z2.getOut().add(label);
-				z_all.add(z1);
-				z_all.add(z2);
-			}
-			log.info("z_all: " + z_all);
-		}
-		return new Diagram(z_all, null);
-	}
-
-	private Diagram setShading(Diagram d) {
-		// /////////////////
-		// Shading and inconsistency
-		Set<Zone> z_all = d.getZones();
-		Set<Zone> z_shaded = new HashSet<Zone>();
-		for (Zone z : z_all) {
-			for (String l : z.getIn()) {
-				if (inconsistentClasses.contains(l)) {
-					z_shaded.add(z);
-					break;
-				}
-				boolean shadeMe = false;
-				if (equivsInfo.containsKey(l)) {
-					for (OWLClass e : equivsInfo.get(l)) {
-						if (!z.getIn().contains(classMap.get(render(e)).fst)) {
-							shadeMe = true;
-							break;
-						}
-					}
-					if (shadeMe) {
-						z_shaded.add(z);
-						break;
-					}
-				}
-				if (unionsInfo.containsKey(l)) {// if l is a union of classes,
-												// S, regions containing l but
-												// not S should be shaded
-					Set<OWLClass> unions = unionsInfo.get(l);
-					shadeMe = true;
-					for (OWLClass u : unions) {
-						String uNm = render(u);
-						if (!classMap.containsKey(uNm) /* lowest level class */
-								|| z.getIn().contains(uNm)) {
-							shadeMe = false;
-							break;
-						}
-					}
-					if (shadeMe) {
-						z_shaded.add(z);
-						break;
-					}
-				}
-			}
-		}
-		return new Diagram(z_all, z_shaded);
-	}
-
+	
 	/**
 	 * Collect the list of curve labels in the diagram, along with info on
-	 * disjoint and union classes
+	 * disjoint and union classes, and the parent classes (supers) and children,
+	 * which are stored in maps.
 	 * 
-	 * @param selectedClass
+	 * @param cls
+	 * @param depth
+	 * @param supers
 	 */
 	private void setClasses(OWLClass cls, int depth, Set<String> supers) {
 
@@ -375,10 +227,171 @@ public class AbstractDiagramBuilder {
 		}
 	}
 
+	/**
+	 * Restrict the contents of the lookup maps to actual curves that will
+	 * be drawn in the current diagram. There may be sometimes hundreds of classes 
+	 * in the disjoint and super classes, but only a few in the classMap.
+	 * We often have to check the contents of these maps, so it's worth it to
+	 * restrict them. There seem to be far fewer in the equivs and unionInfo
+	 * maps for most ontologies, so don't bother.
+	 */
+	private void restrictClasses() {
+		Set<String> classes = classMap.keySet();
+		Set<String> intersect;
+		for (String s : disjointsInfo.keySet()) {
+			intersect = disjointsInfo.get(s);
+			intersect.retainAll(classes);
+			disjointsInfo.put(s, intersect);
+		}
+		for (String s : supersInfo.keySet()) {
+			intersect = supersInfo.get(s);
+			intersect.retainAll(classes);
+			supersInfo.put(s, intersect);
+		}
+	}
+
+	/**
+	 * Called recursively to add curves to the diagram. TODO this is a major target for
+	 * optimisation! (Nice way of saying that it stinks.) 
+	 * 
+	 * @param d
+	 * @param label
+	 * @param disjoints
+	 * @param supers
+	 * @param children
+	 * @return
+	 */
+	private Diagram addCurve(Diagram d, String label, Set<String> disjoints,
+			Set<String> supers, Set<String> children) {
+		if (d.getCurves().contains(label)) {
+			return d;
+		}
+		log.info(label + " is disjoint from " + disjoints + " and has supers "
+				+ supers + " and children " + children);
+		Set<Zone> zs = d.getZones();
+		Set<Zone> z_all = new HashSet<Zone>();
+
+		boolean is_out, is_in;
+		Zone z1, z2;
+
+		for (Zone z : zs) {
+			log.info("Adding " + label + " to " + z);
+			is_in = !isDisjoint(z.getIn(), children) || (isDisjoint(z.getIn(), disjoints)
+					&& !isDisjoint(z.getIn(), supers));
+			is_out = !isDisjoint(z.getIn(), disjoints)
+					|| !isDisjoint(z.getOut(), supers);
+
+			if (is_in) {
+				log.info(z + " is IN");
+				if(isDisjoint(z.getOut(),  supers)) { //TODO incorporate these conditions in the boolean
+					z1 = new Zone(z);
+					z1.getIn().add(label);
+					z_all.add(z1);
+				}
+				if(z.getIn().isEmpty() || isDisjoint(z.getIn(), children)) {//TODO incorporate these conditions in the boolean
+					z2 = new Zone(z);
+					z2.getOut().add(label);
+					z_all.add(z2);
+				}
+			}
+			if (is_out) {
+				log.info(z + " is OUT");
+				z1 = new Zone(z);
+				z1.getOut().add(label);
+				z_all.add(z1);
+			}
+			if (!(is_in || is_out)) {
+				log.info(z + " is SPLIT");
+				z1 = new Zone(z);
+				z2 = new Zone(z);
+				z1.getIn().add(label);
+				z2.getOut().add(label);
+				z_all.add(z1);
+				z_all.add(z2);
+			}
+			log.info("z_all: " + z_all);
+		}
+		return new Diagram(z_all, null);
+	}
+
+	/**
+	 * Add shaded zones to the diagram based on info from the model -- three types of zone
+	 * are target for shading:
+	 * <ul>
+	 * <li>a zone that contains  an inconsistent class,</li>
+	 * <li>a zone that contains some but not all of a set of classes that are equivalent to 
+	 * each other,</li>
+	 * <li>a zone that contains a class which is the disjoint union of several classes, where
+	 * the zone does not contain any of those other classes.</li>
+	 * </ul>
+	 *
+	 * @param d the diagram
+	 * @return
+	 */
+	private Diagram setShading(Diagram d) {
+		Set<Zone> z_all = d.getZones();
+		Set<Zone> z_shaded = new HashSet<Zone>();
+		for (Zone z : z_all) {
+			for (String l : z.getIn()) {
+				if (inconsistentClasses.contains(l)) {
+					z_shaded.add(z);
+					break;
+				}
+				boolean shadeMe = false;
+				if (equivsInfo.containsKey(l)) {
+					for (OWLClass e : equivsInfo.get(l)) {
+						if (!z.getIn().contains(classMap.get(render(e)).fst)) {
+							shadeMe = true;
+							break;
+						}
+					}
+					if (shadeMe) {
+						z_shaded.add(z);
+						break;
+					}
+				}
+				if (unionsInfo.containsKey(l)) {// if l is a union of classes,
+												// S, regions containing l but
+												// not S should be shaded
+					Set<OWLClass> unions = unionsInfo.get(l);
+					shadeMe = true;
+					for (OWLClass u : unions) {
+						String uNm = render(u);
+						if (!classMap.containsKey(uNm) /* lowest level class */
+								|| z.getIn().contains(uNm)) {
+							shadeMe = false;
+							break;
+						}
+					}
+					if (shadeMe) {
+						z_shaded.add(z);
+						break;
+					}
+				}
+			}
+		}
+		return new Diagram(z_all, z_shaded);
+	}
+
+	/**
+	 * Get a string representation of cls according to locale and other 
+	 * settings, then strip out characters that aren't accepted in labels
+	 * by iCircles.
+	 * 
+	 * @param cls the class to render
+	 * @return
+	 */
 	private String render(OWLClass cls) {
 		return ren.render(cls).replaceAll("'", "").replaceAll(" ", "");
 	}
 
+	/**
+	 * Find the intersection of set1 and set2.
+	 * 
+	 * @param set1
+	 * @param set2
+	 * @return
+	 */
 	public <T> Set<T> intersect(Set<T> set1, Set<T> set2) {
 		Set<T> intersection = new HashSet<T>(set1);
 		intersection.retainAll(set2);
@@ -389,35 +402,25 @@ public class AbstractDiagramBuilder {
 		return intersect(set1, set2).isEmpty();
 	}
 
-	private <T> boolean isSuperSet(Set<T> supr, Set<T> sub) {
-		return supr.containsAll(sub);
-	}
-
+	/**
+	 * Look up an entry in one of the maps that contain info on children, parent, 
+	 * disjoint classes, etc.
+	 * 
+	 * @param info the map
+	 * @param label the key to look up
+	 * @return
+	 */
 	private Set<String> getInfo(Map<String, Set<String>> info, String label) {
 		return (info.containsKey(label)) ? info.get(label)
 				: new HashSet<String>();
 	}
 
-	private <T> String stringSet(List<T> s) {
-		StringBuilder sb = new StringBuilder("{");
-		for (T e : s) {
-			sb.append(e.toString());
-			sb.append(", ");
-		}
-		sb.append("}");
-		return sb.toString();
-	}
-
-	private Set<AbstractCurve> stringsToCurves(Set<String> in) {
-		Set<AbstractCurve> res = new HashSet<AbstractCurve>();
-		for (String s : in) {
-			AbstractCurve c = new AbstractCurve(CurveLabel.get(s));
-			res.add(c);
-			// log.info("str2Curve "+c);
-		}
-		return res;
-	}
-
+	/**
+	 * Convert the internal Set<String> of curves into an array of Strings so that 
+	 * it can be passed to iCircles.
+	 * 
+	 * @return the array
+	 */
 	public String[] getCurves() {
 		String[] res = new String[curves.size()];
 		int i = 0;
@@ -427,42 +430,34 @@ public class AbstractDiagramBuilder {
 		return res;
 	}
 
+	/**
+	 * Get the zones in the built diagram as an array of iCircle zones.
+	 * 
+	 * @return the array
+	 */
 	public icircles.input.Zone[] getZones() {
-		List<icircles.input.Zone> res = new ArrayList<icircles.input.Zone>();
-		Set<String> rawNames;
-		String[] namesForDisplay;
-		for (Zone z : zones) {
-			rawNames = z.getIn();
-			int size = rawNames.size();
-			namesForDisplay = new String[size];
-			int i = 0;
-			for (String nm : rawNames) {
-				namesForDisplay[i++] = classMap.get(nm).fst;
-			}
-			res.add(new icircles.input.Zone(namesForDisplay));
-		}
-		res.add(new icircles.input.Zone(new String[] {}));
-		return res.toArray(new icircles.input.Zone[res.size()]);
+		return zonesToICircleZones(zones);
 	}
-
+	
+	/**
+	 * Get the shaded zones in the built diagram as an array of iCircle zones.
+	 * 
+	 * @return the array
+	 */
 	public icircles.input.Zone[] getShadedZones() {
-		List<icircles.input.Zone> res = new ArrayList<icircles.input.Zone>();
-		Set<String> rawNames;
-		String[] namesForDisplay;
-		for (Zone z : shadedZones) {
-			rawNames = z.getIn();
-			int size = rawNames.size();
-			namesForDisplay = new String[size];
-			int i = 0;
-			for (String nm : rawNames) {
-				namesForDisplay[i++] = classMap.get(nm).fst;
-			}
-			res.add(new icircles.input.Zone(namesForDisplay));
-		}
-		return res.toArray(new icircles.input.Zone[res.size()]);
+		return zonesToICircleZones(shadedZones);
 	}
 
-	private icircles.input.Zone[] namesToZones(Set<Zone> input, boolean in) {
+	/**
+	 * Convert the internal Set<Zone>s into arrays of iCircle Zones
+	 * so that it can be passed to iCircles. Not using the iCircles Zone class
+	 * internally because at many points in the code (e.g. in {@link addCurve})
+	 * we need to know what curves are outside the zone, and using the iCircle Zone
+	 * would mean we needed to subtract from the set of all curves.
+	 * 
+	 * @return the array
+	 */
+	private icircles.input.Zone[] zonesToICircleZones(Set<Zone> input) {
 		List<icircles.input.Zone> res = new ArrayList<icircles.input.Zone>();
 		Set<String> rawNames;
 		String[] namesForDisplay;

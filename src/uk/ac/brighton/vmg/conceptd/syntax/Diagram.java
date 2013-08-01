@@ -1,13 +1,26 @@
 package uk.ac.brighton.vmg.conceptd.syntax;
+/**
+ * A lightweight container for sets of curves and zones, used by {@link AbstractDiagramBuilder}
+ * while building up the diagram.
+ * 
+ * Copyright (c) 2013 The ConceptViz authors (see the file AUTHORS).
+ * See the file LICENSE for copying permission.
+ */
 
 import java.util.HashSet;
 import java.util.Set;
 
 public class Diagram {
-	private Set<Zone> zones;
-	private Set<Zone> shadedZones;
-	private Set<String> curves;
+	private final Set<Zone> zones;
+	private final Set<Zone> shadedZones;
+	private Set<String> curves;//should be final but java complains because it might never be initialised
 
+	/**
+	 * The sole constructor.
+	 * 
+	 * @param zs the set of zones in this diagram
+	 * @param sz the set of shaded zones in this diagram
+	 */
 	public Diagram(Set<Zone> zs, Set<Zone> sz) {
 		zones = zs;
 		shadedZones = sz;
@@ -26,6 +39,10 @@ public class Diagram {
 		return curves;
 	}
 	
+	public Set<Zone> getShadedZones() {
+		return shadedZones;
+	}
+	
 	public String toString() {
 		StringBuffer sb = new StringBuffer("D(");
 		for(Zone z: zones) {
@@ -33,10 +50,6 @@ public class Diagram {
 		}
 		sb.append(")");
 		return sb.toString();
-	}
-
-	public Set<Zone> getShadedZones() {
-		return shadedZones;
 	}
 
 }
