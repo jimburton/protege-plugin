@@ -9,7 +9,7 @@ information, and shading represents inconsistency. Concept diagrams include
 additional syntax to represent individuals and roles, making them expressive 
 enough to model an entire ontology, unlike other visualisations we know of.
 
-ConceptViz makes use of the iCircles [3] library to draw Euler diagrams. At 
+ConceptViz makes use of the [iCircles] [3] library to draw Euler diagrams. At 
 present, roles and individuals are not represented -- these are a high priority 
 and development is under way. The immediate goal, however, is to produce a 
 stable Euler-based ontology visualisation tool. Concept diagrams and the 
