@@ -1,8 +1,6 @@
 package uk.ac.brighton.vmg.conceptd.syntax;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 public class Zone {
@@ -37,4 +35,23 @@ public class Zone {
 	private void setOut(Set<String> out) {
 		this.out = out;
 	}
+	
+	@Override
+	public boolean equals(Object o) {
+		if(!(o instanceof Zone)) return false;
+		Zone that = (Zone) o;
+		if(!(this.in.size()==that.in.size())) {
+			return false;
+		}
+		for(String s: this.in) {
+			if(!that.in.contains(s)) return false;
+		}
+		return true;
+	}
+	
+	@Override public int hashCode() {
+        StringBuilder sb = new StringBuilder();
+        for(String s: this.in) sb.append(s);
+        return sb.toString().intern().hashCode();
+    }
 }

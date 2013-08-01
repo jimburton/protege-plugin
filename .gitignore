@@ -1,5 +1,7 @@
 *.class
 /build/
+*~
+.classpath
 
 # Package Files #
 *.jar
