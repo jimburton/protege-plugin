@@ -14,6 +14,7 @@ import icircles.util.CannotDrawException;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -118,7 +119,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 				builder2.build();
 			} catch (CannotDrawException e) {
 				log.info("Too many curves to draw");
-				displayGUIMessage(e.message);
+				displayMessage(e.message);
 				return selectedClass;
 			}
 			String[] cs = builder2.getCurves();
@@ -158,7 +159,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 			cp.setScaleFactor(DIAG_SCALE);
 		} catch (CannotDrawException x) {
 			log.error(x.message);
-			displayGUIMessage(x.message);
+			displayMessage(x.message);
 			return;
 		}
 		cdPanel.removeAll();
@@ -171,10 +172,13 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	 * 
 	 * @param message the message to display
 	 */
-	private void displayGUIMessage(String message) {
+	private void displayMessage(String message) {
 		JTextField tf = new JTextField(message);
 		cdPanel.removeAll();
-		cdPanel.add(tf);	
+		cdPanel.setBackground(Color.WHITE);
+		cdPanel.add(tf, BorderLayout.CENTER);	
+		cdPanel.revalidate(); 
+		cdPanel.repaint();
 	}
 
 	private <T> void debug(String name, Object[] xs) {
