@@ -14,7 +14,7 @@ present, roles and individuals are not represented -- these are a high priority
 and development is under way. The immediate goal, however, is to produce a 
 stable Euler-based ontology visualisation tool. Concept diagrams and the 
 ConceptViz tool were originally developed at the University of Brighton. For 
-more information visit <ontologyengineering.org>. 
+more information visit (http://ontologyengineering.org). 
 
 [1]: http://protege.stanford.edu "Protégé ontology editor"
 [2]: http://www.ontologyengineering.org/node/19 "concept diagram"
