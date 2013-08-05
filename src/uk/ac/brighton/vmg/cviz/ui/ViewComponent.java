@@ -1,4 +1,5 @@
 package uk.ac.brighton.vmg.cviz.ui;
+
 /**
  * The ViewComponent of the ConceptViz plugin.
  * 
@@ -27,6 +28,7 @@ import javax.swing.JLabel;
 import javax.swing.JPanel;
 import javax.swing.JProgressBar;
 import javax.swing.JTextField;
+import javax.swing.SwingUtilities;
 
 import org.apache.log4j.Logger;
 import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
@@ -62,7 +64,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	}
 
 	/**
-	 * The Protege API callback when the view is first loaded. Sets up the GUI 
+	 * The Protege API callback when the view is first loaded. Sets up the GUI
 	 * but doesn't start the process of drawing anything.
 	 */
 	@Override
@@ -90,13 +92,13 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		showIndCB.addItemListener(new ItemListener() {
 			public void itemStateChanged(ItemEvent e) {
 				showInd = (e.getStateChange() == ItemEvent.SELECTED);
-				log.info("drawing with spiders: "+showInd);
+				log.info("drawing with spiders: " + showInd);
 				if (theSelectedClass != null)
 					updateView(theSelectedClass);
 			}
 		});
 		topPanel.add(showIndCB);
-		
+
 		add(topPanel, BorderLayout.NORTH);
 		cdPanel = new JPanel();
 		cdPanel.setBackground(Color.WHITE);
@@ -107,7 +109,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 
 	/**
 	 * Callback when user selects a class in a hierarchy viewer pane. Constructs
-	 * the diagram with the selectedClass as its top-level element using an 
+	 * the diagram with the selectedClass as its top-level element using an
 	 * AbstractDiagramBuilder.
 	 */
 	@Override
@@ -115,20 +117,21 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		// DIAG_SIZE = Math.max(getHeight(), getWidth()) - 100;
 		theSelectedClass = selectedClass;
 		DIAG_SIZE = getHeight() - 50;
-        
+
 		if (selectedClass != null) {
 			displayInfProgress();
-			if(builder != null) builder.notifyStop(); 
-			builder = new AbstractDiagramBuilder(
-					this, selectedClass, getOWLModelManager(), hierarchyDepth, showInd);
+			if (builder != null)
+				builder.notifyStop();
+			builder = new AbstractDiagramBuilder(this, selectedClass,
+					getOWLModelManager(), hierarchyDepth, showInd);
 			buildRunner = new Thread(builder);
 			buildRunner.start();
 		}
 		return selectedClass;
 	}
-	
+
 	public void diagramReady(String[] cs, Zone[] zs, Zone[] szs, Spider[] sps) {
-		Spider[] theSps = (showInd) ? sps : new Spider[]{};
+		Spider[] theSps = (showInd) ? sps : new Spider[] {};
 		debug("Curves", cs);
 		debug("Zones", zs);
 		debug("Shaded zones", szs);
@@ -137,50 +140,74 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	}
 
 	/**
-	 * Pass the generated abstract description to iCircles and display the result
-	 * in a JPanel.
+	 * Pass the generated abstract description to iCircles and display the
+	 * result in a JPanel.
 	 * 
-	 * @param c the abstract curves
-	 * @param z the abstract zones
-	 * @param sz the abstract shaded zones
+	 * @param c
+	 *            the abstract curves
+	 * @param z
+	 *            the abstract zones
+	 * @param sz
+	 *            the abstract shaded zones
 	 */
-	private void drawCD(String[] c, Zone[] z, Zone[] sz, Spider[] sps) {
-		Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC, 16);
+	private void drawCD(final String[] c, final Zone[] z, final Zone[] sz,
+			final Spider[] sps) {
+		new Thread(new Runnable() {
+			public void run() {
+				AbstractDiagram ad = new AbstractDiagram(IC_VERSION, c, z, sz, sps);
+				DiagramCreator dc = new DiagramCreator(ad.toAbstractDescription());
+				try {
+					final ConcreteDiagram cd = dc.createDiagram(DIAG_SIZE);
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							displayDiagram(cd);
+						}
+					});
+				} catch (final CannotDrawException e) {
+					SwingUtilities.invokeLater(new Runnable() {
+						public void run() {
+							displayMessage(e.getMessage());
+						}
+					});
+				}
+			}
+		}).start();
+	}
 
-		ConcreteDiagram cd = null;
+	/**
+	 * Callback for the runnable that creates the concrete diagram by calling
+	 * iCircles.
+	 * 
+	 * @param cd
+	 */
+	private void displayDiagram(ConcreteDiagram cd) {
+		Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC, 16);
 		String failureMessage = null;
-		CirclesPanel cp = null;
-		try {
-			AbstractDiagram ad = new AbstractDiagram(IC_VERSION, c, z, sz, sps);
-			DiagramCreator dc = new DiagramCreator(ad.toAbstractDescription());
-			cd = dc.createDiagram(DIAG_SIZE);
-			cd.setFont(font);
-			cp = new CirclesPanel("", failureMessage, cd, true);// do use colours
-			cp.setScaleFactor(DIAG_SCALE);
-		} catch (CannotDrawException x) {
-			log.error(x.message);
-			displayMessage(x.message);
-			return;
-		}
+		cd.setFont(font);
+		CirclesPanel cp = new CirclesPanel("", failureMessage, cd, true);// do
+																			// use
+																			// colours
+		cp.setScaleFactor(DIAG_SCALE);
 		cdPanel.removeAll();
 		cdPanel.add(cp);
 		cdPanel.validate();
 	}
-	
+
 	/**
 	 * Display an error message or other warning to the user in the main panel.
 	 * 
-	 * @param message the message to display
+	 * @param message
+	 *            the message to display
 	 */
 	public void displayMessage(String message) {
 		JTextField tf = new JTextField(message);
 		cdPanel.removeAll();
 		cdPanel.setBackground(Color.WHITE);
-		cdPanel.add(tf, BorderLayout.CENTER);	
-		cdPanel.revalidate(); 
+		cdPanel.add(tf, BorderLayout.CENTER);
+		cdPanel.revalidate();
 		cdPanel.repaint();
 	}
-	
+
 	private void displayInfProgress() {
 		cdPanel.removeAll();
 		JTextField tf = new JTextField("Building diagram...");
@@ -189,8 +216,8 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		cdPanel.setBackground(Color.WHITE);
 		cdPanel.add(tf, BorderLayout.NORTH);
 		cdPanel.add(pBar, BorderLayout.CENTER);
-		
-		cdPanel.revalidate(); 
+
+		cdPanel.revalidate();
 		cdPanel.repaint();
 	}
 
