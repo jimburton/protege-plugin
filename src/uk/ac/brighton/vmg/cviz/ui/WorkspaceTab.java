@@ -1,4 +1,4 @@
-package uk.ac.brighton.vmg.conceptd.ui;
+package uk.ac.brighton.vmg.cviz.ui;
 
 import org.protege.editor.owl.ui.OWLWorkspaceViewsTab;
 

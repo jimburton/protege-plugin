@@ -1,4 +1,4 @@
-package uk.ac.brighton.vmg.conceptd.syntax;
+package uk.ac.brighton.vmg.cviz.syntax;
 /**
  * A lightweight container for sets of curves and zones, used by {@link AbstractDiagramBuilder}
  * while building up the diagram.
@@ -12,9 +12,9 @@ import icircles.input.Spider;
 import java.util.HashSet;
 import java.util.Set;
 
-public class Diagram {
-	private final Set<Zone> zones;
-	private final Set<Zone> shadedZones;
+public class CVizAbstractDiagram {
+	private final Set<CVizZone> zones;
+	private final Set<CVizZone> shadedZones;
 	private final Set<Spider> spiders;
 	private Set<String> curves;//should be final but java complains because it might never be initialised
 
@@ -24,18 +24,18 @@ public class Diagram {
 	 * @param zs the set of zones in this diagram
 	 * @param sz the set of shaded zones in this diagram
 	 */
-	public Diagram(Set<Zone> zs, Set<Zone> sz, Set<Spider> sp) {
+	public CVizAbstractDiagram(Set<CVizZone> zs, Set<CVizZone> sz, Set<Spider> sp) {
 		zones = zs;
 		shadedZones = sz;
 		spiders = sp;
-		for(Zone z: zones) {
+		for(CVizZone z: zones) {
 			curves = new HashSet<String>(z.getIn());
 			curves.addAll(z.getOut());
 			break;
 		}
 	}
 
-	public Set<Zone> getZones() {
+	public Set<CVizZone> getZones() {
 		return zones;
 	}
 	
@@ -43,7 +43,7 @@ public class Diagram {
 		return curves;
 	}
 	
-	public Set<Zone> getShadedZones() {
+	public Set<CVizZone> getShadedZones() {
 		return shadedZones;
 	}
 	
@@ -53,7 +53,7 @@ public class Diagram {
 	
 	public String toString() {
 		StringBuffer sb = new StringBuffer("D(");
-		for(Zone z: zones) {
+		for(CVizZone z: zones) {
 			sb.append(z.toString()).append(", ");
 		}
 		sb.append(")");

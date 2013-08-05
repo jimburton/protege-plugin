@@ -1,4 +1,4 @@
-package uk.ac.brighton.vmg.conceptd.syntax;
+package uk.ac.brighton.vmg.cviz.syntax;
 /**
  * A lightweight container for sets of Strings, representing classes which are
  * inside and outside of this zone.
@@ -9,7 +9,7 @@ package uk.ac.brighton.vmg.conceptd.syntax;
 import java.util.HashSet;
 import java.util.Set;
 
-public class Zone {
+public class CVizZone {
 	private final Set<String> in, out;
 	
 	/**
@@ -18,7 +18,7 @@ public class Zone {
 	 * @param in the labels of classes which are inside this zone
 	 * @param out the labels of classes which are outside this zone
 	 */
-	public Zone(Set<String> in, Set<String> out) {
+	public CVizZone(Set<String> in, Set<String> out) {
 		this.in = in;
 		this.out = out;
 	}
@@ -28,7 +28,7 @@ public class Zone {
 	 * 
 	 * @param z the Zone to copy
 	 */
-	public Zone(Zone z) {
+	public CVizZone(CVizZone z) {
 		this.in = new HashSet<String>(z.getIn());
 		this.out = new HashSet<String>(z.getOut());
 	}
@@ -48,8 +48,8 @@ public class Zone {
 	
 	@Override
 	public boolean equals(Object o) {
-		if(!(o instanceof Zone)) return false;
-		Zone that = (Zone) o;
+		if(!(o instanceof CVizZone)) return false;
+		CVizZone that = (CVizZone) o;
 		if(!(this.in.size()==that.in.size())) {
 			return false;
 		}
@@ -60,8 +60,6 @@ public class Zone {
 	}
 	
 	@Override public int hashCode() {
-        StringBuilder sb = new StringBuilder();
-        for(String s: this.in) sb.append(s);
-        return sb.toString().intern().hashCode();
+        return in.hashCode() ^ out.hashCode();
     }
 }

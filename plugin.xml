@@ -8,7 +8,7 @@
             value="ConceptViz">
       </label>
       <class
-            value="uk.ac.brighton.vmg.conceptd.ui.ViewComponent">
+            value="uk.ac.brighton.vmg.cviz.ui.ViewComponent">
       </class>
       <category
             value="@org.protege.ontologycategory">
@@ -21,7 +21,7 @@
             value="ConceptViz">
       </label>
       <class
-            value="uk.ac.brighton.vmg.conceptd.ui.WorkspaceTab">
+            value="uk.ac.brighton.vmg.cviz.ui.WorkspaceTab">
       </class>
       <index
             value="0.1">

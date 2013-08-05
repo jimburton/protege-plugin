@@ -1,4 +1,4 @@
-package uk.ac.brighton.vmg.conceptd.syntax;
+package uk.ac.brighton.vmg.cviz.syntax;
 
 /**
  * Responsible for building up the abstract description of Euler/concept diagrams by
@@ -9,7 +9,7 @@ package uk.ac.brighton.vmg.conceptd.syntax;
  * See the file LICENSE for copying permission.
  */
 import icircles.input.Spider;
-import icircles.util.CannotDrawException;
+import icircles.input.Zone;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -18,6 +18,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import javax.swing.SwingUtilities;
 
 import org.apache.log4j.Logger;
 import org.protege.editor.owl.model.OWLModelManager;
@@ -34,12 +36,14 @@ import org.semanticweb.owlapi.reasoner.Node;
 import org.semanticweb.owlapi.reasoner.NodeSet;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 
-public class AbstractDiagramBuilder {
+import uk.ac.brighton.vmg.cviz.ui.ViewComponent;
 
-	private Set<Zone> zones;
-	private Set<Zone> shadedZones;
+public class AbstractDiagramBuilder implements Runnable {
+
+	private Set<CVizZone> zones;
+	private Set<CVizZone> shadedZones;
 	private Set<String> curves;
-	private Map<Zone, Set<OWLIndividual>> individuals;
+	private Map<CVizZone, Set<OWLIndividual>> individuals;
 
 	private Set<String> inconsistentClasses;
 	private Map<String, Pair<String, OWLClass>> classMap;// map from each class
@@ -54,7 +58,7 @@ public class AbstractDiagramBuilder {
 
 	private int hierarchyDepth;
 	private final String EMPTY_LABEL = "Nothing";
-	public static final int MAX_CURVES = 10;
+	public static final int MAX_CURVES = 12;
 	private boolean showSpiders;
 
 	private OWLClass topClass;
@@ -66,6 +70,8 @@ public class AbstractDiagramBuilder {
 	private OWLReasoner theReasoner;
 	private OWLModelManager mgr;
 	private Set<OWLOntology> activeOntologies;
+	private ViewComponent caller;
+	private boolean isRunning = false;
 
 	// provides string renderings of Classes/Properties/Individuals, reflecting
 	// the current output settings
@@ -93,9 +99,10 @@ public class AbstractDiagramBuilder {
 	 *            the depth within the hierarchy that we should descend from
 	 *            selectedClass.
 	 */
-	public AbstractDiagramBuilder(OWLClass selectedClass, OWLModelManager mgr,
-			int d, boolean showSpiders) {
+	public AbstractDiagramBuilder(ViewComponent caller, OWLClass selectedClass,
+			OWLModelManager mgr, int d, boolean showSpiders) {
 		log.info("new builder for " + selectedClass);
+		this.caller = caller;
 		if (selectedClass != null) {
 			this.mgr = mgr;
 			hierarchyDepth = d;
@@ -120,9 +127,9 @@ public class AbstractDiagramBuilder {
 			topClassName = render(topClass);
 			activeOntologies = mgr.getActiveOntologies();
 
-			shadedZones = new HashSet<Zone>();
-			zones = new HashSet<Zone>();
-			individuals = new HashMap<Zone, Set<OWLIndividual>>();
+			shadedZones = new HashSet<CVizZone>();
+			zones = new HashSet<CVizZone>();
+			individuals = new HashMap<CVizZone, Set<OWLIndividual>>();
 			inconsistentClasses = new HashSet<String>();
 			classMap = new HashMap<String, Pair<String, OWLClass>>();
 			disjointsInfo = new HashMap<String, Set<String>>();
@@ -138,29 +145,40 @@ public class AbstractDiagramBuilder {
 	 * {@link getCurves}, {@link getZones} and {@link getShadedZones} to
 	 * retrieve the results.
 	 */
-	public void build() throws CannotDrawException {
+	public void run() {
+		isRunning = true;
 		if (topClass != null) {
 			setClasses(topClass, hierarchyDepth, new HashSet<String>());
 			if (classMap.size() > MAX_CURVES) {
-				throw new CannotDrawException("Too many curves");
+				caller.displayMessage("Too many curves");
+			} else {
+				restrictClasses();
+				CVizZone empty = new CVizZone(new HashSet<String>(),
+						new HashSet<String>());
+				Set<CVizZone> emptyZoneSet = new HashSet<CVizZone>();
+				Set<Spider> emptySpiderSet = new HashSet<Spider>();
+				emptyZoneSet.add(empty);
+				CVizAbstractDiagram d = new CVizAbstractDiagram(emptyZoneSet,
+						new HashSet<CVizZone>(emptyZoneSet), emptySpiderSet);
+				Set<String> emptyCurveSet = new HashSet<String>();
+				d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet,
+						curves);
+				for (String l : classMap.keySet()) {
+					if(!isRunning) break;
+					d = addCurve(d, l, getInfo(disjointsInfo, l),
+							getInfo(supersInfo, l), getInfo(childrenInfo, l));
+				}
+				d = setSpidersAndShading(d);
+				curves = d.getCurves();
+				zones = d.getZones();
+				shadedZones = d.getShadedZones();
+				SwingUtilities.invokeLater(new Runnable() {
+				    public void run() {
+				    	if (isRunning)
+				    		caller.diagramReady(getCurves(), getZones(), getShadedZones(), getSpiders());
+				      }
+				    });
 			}
-			restrictClasses();
-			Zone empty = new Zone(new HashSet<String>(), new HashSet<String>());
-			Set<Zone> emptyZoneSet = new HashSet<Zone>();
-			Set<Spider> emptySpiderSet = new HashSet<Spider>();
-			emptyZoneSet.add(empty);
-			Diagram d = new Diagram(emptyZoneSet, new HashSet<Zone>(
-					emptyZoneSet), emptySpiderSet);
-			Set<String> emptyCurveSet = new HashSet<String>();
-			d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet, curves);
-			for (String l : classMap.keySet()) {
-				d = addCurve(d, l, getInfo(disjointsInfo, l),
-						getInfo(supersInfo, l), getInfo(childrenInfo, l));
-			}
-			d = setSpidersAndShading(d);
-			curves = d.getCurves();
-			zones = d.getZones();
-			shadedZones = d.getShadedZones();
 		}
 	}
 
@@ -282,20 +300,21 @@ public class AbstractDiagramBuilder {
 	 * @param children
 	 * @return
 	 */
-	private Diagram addCurve(Diagram d, String label, Set<String> disjoints,
-			Set<String> supers, Set<String> children) {
+	private CVizAbstractDiagram addCurve(CVizAbstractDiagram d, String label,
+			Set<String> disjoints, Set<String> supers, Set<String> children) {
 		if (d.getCurves().contains(label)) {
 			return d;
 		}
 		log.info(label + " is disjoint from " + disjoints + " and has supers "
 				+ supers + " and children " + children);
-		Set<Zone> zs = d.getZones();
-		Set<Zone> z_all = new HashSet<Zone>();
+		Set<CVizZone> zs = d.getZones();
+		Set<CVizZone> z_all = new HashSet<CVizZone>();
 
 		boolean is_out, is_in;
-		Zone z1, z2;
+		CVizZone z1, z2;
 
-		for (Zone z : zs) {
+		for (CVizZone z : zs) {
+			if(!isRunning) break;
 			log.info("Adding " + label + " to " + z);
 			is_in = !isDisjoint(z.getIn(), children)
 					|| (isDisjoint(z.getIn(), disjoints) && !isDisjoint(
@@ -308,7 +327,7 @@ public class AbstractDiagramBuilder {
 				if (isDisjoint(z.getOut(), supers)) { // TODO incorporate these
 														// conditions in the
 														// boolean
-					z1 = new Zone(z);
+					z1 = new CVizZone(z);
 					z1.getIn().add(label);
 					z_all.add(z1);
 				}
@@ -319,21 +338,21 @@ public class AbstractDiagramBuilder {
 																				// in
 																				// the
 																				// boolean
-					z2 = new Zone(z);
+					z2 = new CVizZone(z);
 					z2.getOut().add(label);
 					z_all.add(z2);
 				}
 			}
 			if (is_out) {
 				log.info(z + " is OUT");
-				z1 = new Zone(z);
+				z1 = new CVizZone(z);
 				z1.getOut().add(label);
 				z_all.add(z1);
 			}
 			if (!(is_in || is_out)) {
 				log.info(z + " is SPLIT");
-				z1 = new Zone(z);
-				z2 = new Zone(z);
+				z1 = new CVizZone(z);
+				z2 = new CVizZone(z);
 				z1.getIn().add(label);
 				z2.getOut().add(label);
 				z_all.add(z1);
@@ -341,7 +360,7 @@ public class AbstractDiagramBuilder {
 			}
 			log.info("z_all: " + z_all);
 		}
-		return new Diagram(z_all, null, null);
+		return new CVizAbstractDiagram(z_all, null, null);
 	}
 
 	/**
@@ -359,11 +378,11 @@ public class AbstractDiagramBuilder {
 	 *            the diagram
 	 * @return
 	 */
-	private Diagram setSpidersAndShading(Diagram d) {
-		Set<Zone> z_all = d.getZones();
-		Set<Zone> z_shaded = new HashSet<Zone>();
+	private CVizAbstractDiagram setSpidersAndShading(CVizAbstractDiagram d) {
+		Set<CVizZone> z_all = d.getZones();
+		Set<CVizZone> z_shaded = new HashSet<CVizZone>();
 		Set<OWLIndividual> spiders;
-		for (Zone z : z_all) {
+		for (CVizZone z : z_all) {
 			spiders = new HashSet<OWLIndividual>();
 			for (String l : z.getIn()) {
 				// spiders
@@ -416,9 +435,10 @@ public class AbstractDiagramBuilder {
 					}
 				}
 			}
-			if (showSpiders) individuals.put(z, spiders);
+			if (showSpiders)
+				individuals.put(z, spiders);
 		}
-		return new Diagram(z_all, z_shaded, null);
+		return new CVizAbstractDiagram(z_all, z_shaded, null);
 	}
 
 	/**
@@ -486,8 +506,8 @@ public class AbstractDiagramBuilder {
 	 * 
 	 * @return the array
 	 */
-	public icircles.input.Zone[] getZones() {
-		return zonesToICircleZones(zones);
+	public Zone[] getZones() {
+		return cvizZonesToICirclesZones(zones);
 	}
 
 	/**
@@ -495,8 +515,8 @@ public class AbstractDiagramBuilder {
 	 * 
 	 * @return the array
 	 */
-	public icircles.input.Zone[] getShadedZones() {
-		return zonesToICircleZones(shadedZones);
+	public Zone[] getShadedZones() {
+		return cvizZonesToICirclesZones(shadedZones);
 	}
 
 	/**
@@ -508,11 +528,11 @@ public class AbstractDiagramBuilder {
 	 * 
 	 * @return the array
 	 */
-	private icircles.input.Zone[] zonesToICircleZones(Set<Zone> input) {
-		List<icircles.input.Zone> res = new ArrayList<icircles.input.Zone>();
+	private Zone[] cvizZonesToICirclesZones(Set<CVizZone> input) {
+		List<Zone> res = new ArrayList<Zone>();
 		Set<String> rawNames;
 		String[] namesForDisplay;
-		for (Zone z : input) {
+		for (CVizZone z : input) {
 			rawNames = z.getIn();
 			int size = rawNames.size();
 			namesForDisplay = new String[size];
@@ -520,9 +540,9 @@ public class AbstractDiagramBuilder {
 			for (String nm : rawNames) {
 				namesForDisplay[i++] = classMap.get(nm).fst;
 			}
-			res.add(new icircles.input.Zone(namesForDisplay));
+			res.add(new Zone(namesForDisplay));
 		}
-		return res.toArray(new icircles.input.Zone[res.size()]);
+		return res.toArray(new Zone[res.size()]);
 	}
 
 	/**
@@ -532,15 +552,15 @@ public class AbstractDiagramBuilder {
 	 * @return the array of spiders
 	 */
 	public Spider[] getSpiders() {
-		Set<Zone> habitatSet;
-		icircles.input.Zone[] habitat;
+		Set<CVizZone> habitatSet;
+		Zone[] habitat;
 		String name;
 		Set<OWLIndividual> inds;
 		List<Spider> spiders = new ArrayList<Spider>();
-		for (Zone z : individuals.keySet()) {
-			habitatSet = new HashSet<Zone>();
+		for (CVizZone z : individuals.keySet()) {
+			habitatSet = new HashSet<CVizZone>();
 			habitatSet.add(z);
-			habitat = zonesToICircleZones(habitatSet);
+			habitat = cvizZonesToICirclesZones(habitatSet);
 			inds = individuals.get(z);
 			String nm;
 			for (OWLIndividual i : inds) {
@@ -548,11 +568,15 @@ public class AbstractDiagramBuilder {
 				if (i.isNamed()) {
 					nm = ren.render((OWLEntity) i);
 				}
-				//log.info("A spider called " + nm);
+				// log.info("A spider called " + nm);
 				spiders.add(new Spider(nm, habitat));
 			}
 		}
 		return spiders.toArray(new Spider[spiders.size()]);
+	}
+	
+	public void notifyStop() {
+		isRunning = false;
 	}
 
 }

@@ -1,4 +1,4 @@
-package uk.ac.brighton.vmg.conceptd.ui;
+package uk.ac.brighton.vmg.cviz.ui;
 /**
  * The ViewComponent of the ConceptViz plugin.
  * 
@@ -10,11 +10,11 @@ import icircles.concreteDiagram.DiagramCreator;
 import icircles.gui.CirclesPanel;
 import icircles.input.AbstractDiagram;
 import icircles.input.Spider;
+import icircles.input.Zone;
 import icircles.util.CannotDrawException;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -25,13 +25,14 @@ import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
+import javax.swing.JProgressBar;
 import javax.swing.JTextField;
 
 import org.apache.log4j.Logger;
 import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.OWLClass;
 
-import uk.ac.brighton.vmg.conceptd.syntax.AbstractDiagramBuilder;
+import uk.ac.brighton.vmg.cviz.syntax.AbstractDiagramBuilder;
 
 public class ViewComponent extends AbstractOWLClassViewComponent {
 	private static final long serialVersionUID = -4515710047558710080L;
@@ -42,10 +43,12 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	private JComboBox<String> depthPicker;
 	private boolean showInd = false;
 	private OWLClass theSelectedClass;
+	private Thread buildRunner;
 
 	private int DIAG_SIZE;
 	private final double DIAG_SCALE = 0.9;
 	private int hierarchyDepth = 2;
+	private AbstractDiagramBuilder builder;
 
 	private static final Logger log = Logger.getLogger(ViewComponent.class);
 	private static final int IC_VERSION = 1;
@@ -112,27 +115,25 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		// DIAG_SIZE = Math.max(getHeight(), getWidth()) - 100;
 		theSelectedClass = selectedClass;
 		DIAG_SIZE = getHeight() - 50;
+        
 		if (selectedClass != null) {
-			AbstractDiagramBuilder builder2 = new AbstractDiagramBuilder(
-					selectedClass, getOWLModelManager(), hierarchyDepth, showInd);
-			try {
-				builder2.build();
-			} catch (CannotDrawException e) {
-				log.info("Too many curves to draw");
-				displayMessage(e.message);
-				return selectedClass;
-			}
-			String[] cs = builder2.getCurves();
-			icircles.input.Zone[] zs = builder2.getZones();
-			icircles.input.Zone[] szs = builder2.getShadedZones();
-			Spider[] sps = (showInd) ? builder2.getSpiders() : new Spider[]{};
-			debug("Curves", cs);
-			debug("Zones", zs);
-			debug("Shaded zones", szs);
-			debug("Individuals", sps);
-			drawCD(cs, zs, szs, sps);
+			displayInfProgress();
+			if(builder != null) builder.notifyStop(); 
+			builder = new AbstractDiagramBuilder(
+					this, selectedClass, getOWLModelManager(), hierarchyDepth, showInd);
+			buildRunner = new Thread(builder);
+			buildRunner.start();
 		}
 		return selectedClass;
+	}
+	
+	public void diagramReady(String[] cs, Zone[] zs, Zone[] szs, Spider[] sps) {
+		Spider[] theSps = (showInd) ? sps : new Spider[]{};
+		debug("Curves", cs);
+		debug("Zones", zs);
+		debug("Shaded zones", szs);
+		debug("Individuals", sps);
+		drawCD(cs, zs, szs, theSps);
 	}
 
 	/**
@@ -143,8 +144,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	 * @param z the abstract zones
 	 * @param sz the abstract shaded zones
 	 */
-	private void drawCD(String[] c, icircles.input.Zone[] z,
-			icircles.input.Zone[] sz, Spider[] sps) {
+	private void drawCD(String[] c, Zone[] z, Zone[] sz, Spider[] sps) {
 		Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC, 16);
 
 		ConcreteDiagram cd = null;
@@ -172,11 +172,24 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	 * 
 	 * @param message the message to display
 	 */
-	private void displayMessage(String message) {
+	public void displayMessage(String message) {
 		JTextField tf = new JTextField(message);
 		cdPanel.removeAll();
 		cdPanel.setBackground(Color.WHITE);
 		cdPanel.add(tf, BorderLayout.CENTER);	
+		cdPanel.revalidate(); 
+		cdPanel.repaint();
+	}
+	
+	private void displayInfProgress() {
+		cdPanel.removeAll();
+		JTextField tf = new JTextField("Building diagram...");
+		JProgressBar pBar = new JProgressBar();
+		pBar.setIndeterminate(true);
+		cdPanel.setBackground(Color.WHITE);
+		cdPanel.add(tf, BorderLayout.NORTH);
+		cdPanel.add(pBar, BorderLayout.CENTER);
+		
 		cdPanel.revalidate(); 
 		cdPanel.repaint();
 	}

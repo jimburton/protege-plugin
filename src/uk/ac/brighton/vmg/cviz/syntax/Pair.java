@@ -1,4 +1,4 @@
-package uk.ac.brighton.vmg.conceptd.syntax;
+package uk.ac.brighton.vmg.cviz.syntax;
 
 /**
  * A utility class for 2-tuples. Amazing that java doesn't have one of these...

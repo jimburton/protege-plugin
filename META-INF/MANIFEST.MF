@@ -1,7 +1,7 @@
 Manifest-Version: 1.0
 Bundle-ManifestVersion: 2
 Bundle-Name: ConceptViz Plugin
-Bundle-SymbolicName: uk.ac.brighton.vmg.conceptd;singleton:=true
+Bundle-SymbolicName: uk.ac.brighton.vmg.cviz;singleton:=true
 Bundle-Category: protege
 Bundle-ContactAddress: ontoed@brighton.ac.uk
 Bundle-DocURL: http://www.ontologyengineering.org

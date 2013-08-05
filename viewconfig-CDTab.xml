@@ -8,7 +8,7 @@
         </CNode>
         <CNode>
             <Component label="ConceptViz">
-                <Property id="pluginId" value="uk.ac.brighton.vmg.conceptd.ConceptDiagramViewComponent"/>
+                <Property id="pluginId" value="uk.ac.brighton.vmg.cviz.ConceptDiagramViewComponent"/>
             </Component>
         </CNode>
     </VSNode>

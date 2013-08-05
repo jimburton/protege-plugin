@@ -19,7 +19,7 @@
    <property name="minor.version" value="0"/>
    <property name="micro.version" value="0"/>
 
-   <property name = "plugin"          value = "uk.ac.brighton.vmg.conceptd" />
+   <property name = "plugin"          value = "uk.ac.brighton.vmg.cviz" />
 
    <property name = "src"               location = "./src"/>  
    <property name = "build"             location = "./build"/>
