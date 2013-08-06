@@ -166,7 +166,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 				} catch (final CannotDrawException e) {
 					SwingUtilities.invokeLater(new Runnable() {
 						public void run() {
-							displayMessage(e.getMessage());
+							displayMessage(e.message);
 						}
 					});
 				}
@@ -207,6 +207,10 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		cdPanel.revalidate();
 		cdPanel.repaint();
 	}
+	
+	/**
+	 * Display a progress bar and message while the abstract diagram builder is doing its work.
+	 */
 
 	private void displayInfProgress() {
 		cdPanel.removeAll();

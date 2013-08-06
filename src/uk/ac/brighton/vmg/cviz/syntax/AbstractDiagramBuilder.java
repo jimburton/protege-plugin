@@ -58,7 +58,7 @@ public class AbstractDiagramBuilder implements Runnable {
 
 	private int hierarchyDepth;
 	private final String EMPTY_LABEL = "Nothing";
-	public static final int MAX_CURVES = 12;
+	public static final int MAX_CURVES = 20;
 	private boolean showSpiders;
 
 	private OWLClass topClass;
