@@ -34,7 +34,7 @@ import org.apache.log4j.Logger;
 import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.OWLClass;
 
-import uk.ac.brighton.vmg.cviz.syntax.AbstractDiagramBuilder;
+import uk.ac.brighton.vmg.cviz.diagrambuilder.AbstractDiagramBuilder;
 
 public class ViewComponent extends AbstractOWLClassViewComponent {
 	private static final long serialVersionUID = -4515710047558710080L;
