@@ -8,7 +8,7 @@ package uk.ac.brighton.vmg.cviz.ui;
  */
 import icircles.concreteDiagram.ConcreteDiagram;
 import icircles.concreteDiagram.DiagramCreator;
-import icircles.gui.CirclesPanel;
+import icircles.gui.CirclesSVGGenerator;
 import icircles.input.AbstractDiagram;
 import icircles.input.Spider;
 import icircles.input.Zone;
@@ -16,7 +16,6 @@ import icircles.util.CannotDrawException;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
-import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.awt.event.ItemEvent;
@@ -30,11 +29,13 @@ import javax.swing.JProgressBar;
 import javax.swing.JTextField;
 import javax.swing.SwingUtilities;
 
+import org.apache.batik.swing.JSVGCanvas;
 import org.apache.log4j.Logger;
 import org.protege.editor.owl.ui.view.cls.AbstractOWLClassViewComponent;
 import org.semanticweb.owlapi.model.OWLClass;
+import org.w3c.dom.svg.SVGDocument;
 
-import uk.ac.brighton.vmg.cviz.syntax.AbstractDiagramBuilder;
+import uk.ac.brighton.vmg.cviz.diagrambuilder.AbstractDiagramBuilder;
 
 public class ViewComponent extends AbstractOWLClassViewComponent {
 	private static final long serialVersionUID = -4515710047558710080L;
@@ -42,6 +43,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	public static final int CVIZ_VERSION_MINOR = 1;
 	public static final String CVIZ_VERSION_STATUS = "alpha";
 	private JPanel cdPanel;
+	private JSVGCanvas svgCanvas;
 	private JComboBox<String> depthPicker;
 	private boolean showInd = false;
 	private OWLClass theSelectedClass;
@@ -181,7 +183,7 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 	 * @param cd
 	 */
 	private void displayDiagram(ConcreteDiagram cd) {
-		Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC, 16);
+		/*Font font = new Font("Helvetica", Font.BOLD | Font.ITALIC, 16);
 		String failureMessage = null;
 		cd.setFont(font);
 		CirclesPanel cp = new CirclesPanel("", failureMessage, cd, true);// do
@@ -190,6 +192,12 @@ public class ViewComponent extends AbstractOWLClassViewComponent {
 		cp.setScaleFactor(DIAG_SCALE);
 		cdPanel.removeAll();
 		cdPanel.add(cp);
+		cdPanel.validate();*/
+		svgCanvas = new JSVGCanvas();
+		SVGDocument doc = new CirclesSVGGenerator(cd).toSVG();
+		svgCanvas.setSVGDocument(doc);
+		cdPanel.removeAll();
+		cdPanel.add(svgCanvas);
 		cdPanel.validate();
 	}
 
