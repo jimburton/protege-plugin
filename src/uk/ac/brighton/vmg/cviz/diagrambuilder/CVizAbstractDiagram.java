@@ -1,4 +1,4 @@
-package uk.ac.brighton.vmg.cviz.syntax;
+package uk.ac.brighton.vmg.cviz.diagrambuilder;
 /**
  * A lightweight container for sets of curves and zones, used by {@link AbstractDiagramBuilder}
  * while building up the diagram.

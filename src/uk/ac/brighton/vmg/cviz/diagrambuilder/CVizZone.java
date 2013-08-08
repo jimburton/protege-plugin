@@ -1,4 +1,4 @@
-package uk.ac.brighton.vmg.cviz.syntax;
+package uk.ac.brighton.vmg.cviz.diagrambuilder;
 /**
  * A lightweight container for sets of Strings, representing classes which are
  * inside and outside of this zone.
@@ -59,7 +59,8 @@ public class CVizZone {
 		return true;
 	}
 	
-	@Override public int hashCode() {
+	@Override 
+	public int hashCode() {
         return in.hashCode() ^ out.hashCode();
     }
 }

@@ -1,4 +1,4 @@
-package uk.ac.brighton.vmg.cviz.syntax;
+package uk.ac.brighton.vmg.cviz.diagrambuilder;
 
 /**
  * Responsible for building up the abstract description of Euler/concept diagrams by
@@ -12,12 +12,14 @@ import icircles.input.Spider;
 import icircles.input.Zone;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 import javax.swing.SwingUtilities;
 
@@ -43,13 +45,16 @@ public class AbstractDiagramBuilder implements Runnable {
 	private Set<CVizZone> zones;
 	private Set<CVizZone> shadedZones;
 	private Set<String> curves;
-	private Map<CVizZone, Set<OWLIndividual>> individuals;
+	// imdMap is map from class name -> lists of pairs of spider names and
+	// habitat
+	private Map<String, List<Pair<String, List<CVizZone>>>> indMap;
 
 	private Set<String> inconsistentClasses;
-	private Map<String, Pair<String, OWLClass>> classMap;// map from each class
-															// name to a pair of
-															// its real name and
-															// OWL class
+	/*
+	 * classMap is a map from each class name to a pair of its display name and
+	 * OWL class
+	 */
+	private Map<String, Pair<String, OWLClass>> classMap;
 	private Map<String, Set<String>> disjointsInfo;
 	private Map<String, Set<String>> supersInfo;
 	private Map<String, Set<String>> childrenInfo;
@@ -116,20 +121,19 @@ public class AbstractDiagramBuilder implements Runnable {
 			theProvider = (theModel == MODEL.INFERRED ? inferredHierarchyProvider
 					: assertedHierarchyProvider);
 			theReasoner = mgr.getOWLReasonerManager().getCurrentReasoner();
-			log.info("the reasoner: " + theReasoner.getReasonerName());// evals
-																		// to
-																		// "Protégé Null Reasoner"
-																		// if
-																		// none
-																		// is
-																		// active
+			/*
+			 * the next line evals to "Protégé Null Reasoner" if there is no
+			 * active reasoner
+			 */
+			// log.info("the reasoner: " + theReasoner.getReasonerName());
 			ren = mgr.getOWLEntityRenderer();
 			topClassName = render(topClass);
 			activeOntologies = mgr.getActiveOntologies();
 
 			shadedZones = new HashSet<CVizZone>();
 			zones = new HashSet<CVizZone>();
-			individuals = new HashMap<CVizZone, Set<OWLIndividual>>();
+			// contents of indMap are mutable so don't use HashMap
+			indMap = new TreeMap<String, List<Pair<String, List<CVizZone>>>>();
 			inconsistentClasses = new HashSet<String>();
 			classMap = new HashMap<String, Pair<String, OWLClass>>();
 			disjointsInfo = new HashMap<String, Set<String>>();
@@ -141,9 +145,7 @@ public class AbstractDiagramBuilder implements Runnable {
 	}
 
 	/**
-	 * Create the diagram. No return value, the caller needs to use
-	 * {@link getCurves}, {@link getZones} and {@link getShadedZones} to
-	 * retrieve the results.
+	 * Creates the diagram.
 	 */
 	public void run() {
 		isRunning = true;
@@ -164,20 +166,22 @@ public class AbstractDiagramBuilder implements Runnable {
 				d = addCurve(d, topClassName, emptyCurveSet, emptyCurveSet,
 						curves);
 				for (String l : classMap.keySet()) {
-					if(!isRunning) break;
+					if (!isRunning)
+						break;
 					d = addCurve(d, l, getInfo(disjointsInfo, l),
 							getInfo(supersInfo, l), getInfo(childrenInfo, l));
 				}
-				d = setSpidersAndShading(d);
+				d = setShading(d);
 				curves = d.getCurves();
 				zones = d.getZones();
 				shadedZones = d.getShadedZones();
 				SwingUtilities.invokeLater(new Runnable() {
-				    public void run() {
-				    	if (isRunning)
-				    		caller.diagramReady(getCurves(), getZones(), getShadedZones(), getSpiders());
-				      }
-				    });
+					public void run() {
+						if (isRunning)
+							caller.diagramReady(getCurves(), getZones(),
+									getShadedZones(), getSpiders());
+					}
+				});
 			}
 		}
 	}
@@ -209,6 +213,27 @@ public class AbstractDiagramBuilder implements Runnable {
 					setClasses(sub, newDepth, supers2);
 				}
 			}
+			// collect the spiders info
+			Set<OWLIndividual> inds = cls.getIndividuals(mgr
+					.getActiveOntologies());
+			// TODO all individuals are reported as belonging to Thing, but not
+			// to the other
+			// superclasses of the class within which they are actually defined.
+			// For now,
+			// only show spiders for the actual class, c, within which they are
+			// defined, and work
+			// out how to show spiders in any superclass of c later on
+			if (showSpiders && !inds.isEmpty() && !nm.equals("Thing")) {
+				ArrayList<Pair<String, List<CVizZone>>> spInfo = new ArrayList<Pair<String, List<CVizZone>>>();
+				for (OWLIndividual i : inds) {
+					if (i.isNamed()) {
+						spInfo.add(new Pair<String, List<CVizZone>>(ren
+								.render((OWLEntity) i),
+								new ArrayList<CVizZone>()));
+					}
+				}
+				indMap.put(nm, spInfo);
+			}
 			// collect the children info
 			Set<String> childrenStr = new HashSet<String>();
 			Iterator<OWLClass> it = children.iterator();
@@ -219,9 +244,7 @@ public class AbstractDiagramBuilder implements Runnable {
 			childrenInfo.put(nm, childrenStr);
 
 			// collect the disjointness info
-			NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(cls);// or use
-																		// TR's
-																		// method
+			NodeSet<OWLClass> ds = theReasoner.getDisjointClasses(cls);
 			Set<String> disjoints = new HashSet<String>();
 			Iterator<Node<OWLClass>> it2 = ds.iterator();
 			while (it2.hasNext()) {
@@ -290,8 +313,7 @@ public class AbstractDiagramBuilder implements Runnable {
 	}
 
 	/**
-	 * Called recursively to add curves to the diagram. TODO this is a major
-	 * target for optimisation! (Nice way of saying that it stinks.)
+	 * Called recursively to add curves to the diagram.
 	 * 
 	 * @param d
 	 * @param label
@@ -314,7 +336,8 @@ public class AbstractDiagramBuilder implements Runnable {
 		CVizZone z1, z2;
 
 		for (CVizZone z : zs) {
-			if(!isRunning) break;
+			if (!isRunning)
+				break;
 			log.info("Adding " + label + " to " + z);
 			is_in = !isDisjoint(z.getIn(), children)
 					|| (isDisjoint(z.getIn(), disjoints) && !isDisjoint(
@@ -324,20 +347,14 @@ public class AbstractDiagramBuilder implements Runnable {
 
 			if (is_in) {
 				log.info(z + " is IN");
-				if (isDisjoint(z.getOut(), supers)) { // TODO incorporate these
-														// conditions in the
-														// boolean
+				/* TODO incorporate this condition in the boolean */
+				if (isDisjoint(z.getOut(), supers)) {
 					z1 = new CVizZone(z);
 					z1.getIn().add(label);
 					z_all.add(z1);
 				}
-				if (z.getIn().isEmpty() || isDisjoint(z.getIn(), children)) {// TODO
-																				// incorporate
-																				// these
-																				// conditions
-																				// in
-																				// the
-																				// boolean
+				/* TODO incorporate this condition in the boolean */
+				if (z.getIn().isEmpty() || isDisjoint(z.getIn(), children)) {
 					z2 = new CVizZone(z);
 					z2.getOut().add(label);
 					z_all.add(z2);
@@ -378,25 +395,31 @@ public class AbstractDiagramBuilder implements Runnable {
 	 *            the diagram
 	 * @return
 	 */
-	private CVizAbstractDiagram setSpidersAndShading(CVizAbstractDiagram d) {
+	private CVizAbstractDiagram setShading(CVizAbstractDiagram d) {
 		Set<CVizZone> z_all = d.getZones();
 		Set<CVizZone> z_shaded = new HashSet<CVizZone>();
-		Set<OWLIndividual> spiders;
 		for (CVizZone z : z_all) {
-			spiders = new HashSet<OWLIndividual>();
 			for (String l : z.getIn()) {
 				// spiders
 				if (showSpiders) {
-					OWLClass c = classMap.get(l).snd;
-					if (spiders.isEmpty()) {
-						for (OWLOntology o : activeOntologies) {
-							spiders.addAll(c.getIndividuals(o));
+					if (indMap.containsKey(l)) {
+						List<Pair<String, List<CVizZone>>> sps = indMap.get(l);
+						log.info("Spiders in " + l + ": " + sps);
+						for (Pair<String, List<CVizZone>> spInfo : sps) {
+							spInfo.snd.add(z);// add this zone to the habitat
 						}
-					} else {
-						for (OWLOntology o : activeOntologies) {
-							spiders.retainAll(c.getIndividuals(o));
+					} /*else if (!isDisjoint(getInfo(childrenInfo, l), indMap.keySet())) {
+						for(String child: getInfo(childrenInfo, l)) {
+							log.info(l+" has child "+child);
+							if(indMap.containsKey(child)) {
+								List<Pair<String, List<CVizZone>>> sps = indMap.get(child);
+								log.info("Spiders in " + child + ": " + sps);
+								for (Pair<String, List<CVizZone>> spInfo : sps) {
+									spInfo.snd.add(z);// add this zone to the habitat
+								}
+							}
 						}
-					}
+					}*/
 				}
 				// shading
 				if (inconsistentClasses.contains(l)) {
@@ -435,8 +458,9 @@ public class AbstractDiagramBuilder implements Runnable {
 					}
 				}
 			}
-			if (showSpiders)
-				individuals.put(z, spiders);
+			if (showSpiders) {
+				// individuals.put(z, spiders);
+			}
 		}
 		return new CVizAbstractDiagram(z_all, z_shaded, null);
 	}
@@ -528,7 +552,7 @@ public class AbstractDiagramBuilder implements Runnable {
 	 * 
 	 * @return the array
 	 */
-	private Zone[] cvizZonesToICirclesZones(Set<CVizZone> input) {
+	private Zone[] cvizZonesToICirclesZones(Collection<CVizZone> input) {
 		List<Zone> res = new ArrayList<Zone>();
 		Set<String> rawNames;
 		String[] namesForDisplay;
@@ -552,29 +576,20 @@ public class AbstractDiagramBuilder implements Runnable {
 	 * @return the array of spiders
 	 */
 	public Spider[] getSpiders() {
-		Set<CVizZone> habitatSet;
 		Zone[] habitat;
-		String name;
-		Set<OWLIndividual> inds;
 		List<Spider> spiders = new ArrayList<Spider>();
-		for (CVizZone z : individuals.keySet()) {
-			habitatSet = new HashSet<CVizZone>();
-			habitatSet.add(z);
-			habitat = cvizZonesToICirclesZones(habitatSet);
-			inds = individuals.get(z);
-			String nm;
-			for (OWLIndividual i : inds) {
-				nm = "";
-				if (i.isNamed()) {
-					nm = ren.render((OWLEntity) i);
-				}
-				// log.info("A spider called " + nm);
-				spiders.add(new Spider(nm, habitat));
+		for (List<Pair<String, List<CVizZone>>> spInfoList : indMap.values()) {
+			for (Pair<String, List<CVizZone>> spInfo : spInfoList) {
+				habitat = cvizZonesToICirclesZones(spInfo.snd);
+				spiders.add(new Spider(spInfo.fst, habitat));
 			}
 		}
 		return spiders.toArray(new Spider[spiders.size()]);
 	}
-	
+
+	/**
+	 * Called to notify this instance that its diagram isn't required anymore
+	 */
 	public void notifyStop() {
 		isRunning = false;
 	}
